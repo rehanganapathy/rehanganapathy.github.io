@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Understanding Sieve Cache</title>
+
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        h1,
+        h2 {
+            color: #2c3e50;
+        }
+
+        code {
+            background: #f4f4f4;
+            padding: 2px 5px;
+            border-radius: 4px;
+        }
+
+        pre {
+            background: #f4f4f4;
+            padding: 10px;
+            overflow-x: auto;
+            border-radius: 4px;
+        }
+
+        .cache-container {
+            display: flex;
+            margin: 20px 0;
+            gap: 10px;
+        }
+
+        .node {
+            border: 2px solid #2c3e50;
+            padding: 10px;
+            width: 60px;
+            text-align: center;
+            border-radius: 8px;
+            position: relative;
+            transition: all 0.4s ease;
+        }
+
+        .visited {
+            background-color: #dff0d8;
+        }
+
+        .evicted {
+            background-color: #f8d7da;
+            opacity: 0.6;
+        }
+
+        body.dark-mode {
+            background-color: #030f22;
+            color: #ffffff;
+        }
+
+        body.dark-mode h1,
+        body.dark-mode h2 {
+            color: #ffffff;
+        }
+
+        body.dark-mode code,
+        body.dark-mode pre {
+            background: #333333;
+        }
+
+        body.dark-mode .node {
+            border-color: #ffffff;
+        }
+
+        body.dark-mode .visited {
+            background-color: #4caf50;
+        }
+
+        body.dark-mode .evicted {
+            background-color: #e57373;
+        }
+
+        body.dark-mode #log {
+            background: #333333;
+        }
+
+        #log {
+            background: #eef;
+            padding: 10px;
+            margin-top: 20px;
+            font-family: monospace;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            margin: 10px 0;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            background-color: #e0e0e0;
+            color: #333;
+            transition: background-color 0.3s ease;
+        }
+
+        button:hover {
+            background-color: #ccc;
+        }
+
+        body.dark-mode button {
+            background-color: #444;
+            color: #fff;
+        }
+
+        body.dark-mode button:hover {
+            background-color: #666;
+        }
+
+        #toggleTheme {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        #toggleTheme svg {
+            width: 20px;
+            height: 20px;
+        }
+    </style>
+</head>
+
+
+<body>
+    <button id="toggleTheme">
+        <span id="themeIcon">
+            <!-- Default: Moon Icon -->
+            <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24">
+                <path
+                    d="M21.752 15.002A9.718 9.718 0 0112 21.75a9.75 9.75 0 01-8.485-14.68.75.75 0 011.235-.16 7.5 7.5 0 0010.34 10.34.75.75 0 01.16 1.235z" />
+            </svg>
+        </span>
+        <span>Toggle Theme</span>
+    </button>
+
+    <h1>Understanding the Sieve Cache Algorithm</h1>
+    <p>
+        Caching has sort of become an indespensable part of backend systems, allowing systems to achieve millisecond
+        latency and deliver at scale. Many of the popular caching techniques involve FIFO (first in first out), LRU
+        (least recently used), MRU (Most Recently Used) amongst others. Lately SIEVE is gaining a lot of traction in
+        large scale systems at organisations like Google and Meta.
+
+        <a href="https://junchengyang.com/publication/nsdi24-SIEVE.pdf">SIEVE</a> was compared against
+        other strategies in this paper last year and presents a unique eviction strategy
+        aimed at maximising efficiency and reducing the cache miss ratio. The work compares web cache workloads and
+        finds SIEVE to have a better miss ratio than ARC.
+        <br />
+        A <strong>sieve cache</strong> is a smart caching strategy that selectively stores only valuable or frequently
+        accessed data, instead of blindly caching everything. This is particularly useful in systems with limited memory
+        or unpredictable access patterns.
+
+    </p>
+
+    <h2>Concept</h2>
+    <p>
+        Inspired by the <em>Second-Chance</em> or <em>Clock</em> algorithm, the sieve cache gives each cache item a
+        "second chance" before eviction. Each item has a <code>visited</code> flag to determine whether it was accessed
+        recently.
+    </p>
+
+    <h2>How It Works</h2>
+    <ul>
+        <li>If the item is accessed and is in the cache (a hit), it's marked as <code>visited = true</code>.</li>
+        <li>If the item is not in the cache (a miss), it's inserted.</li>
+        <li>If the cache is full, it evicts the first unvisited node, giving visited nodes a second chance.</li>
+    </ul>
+
+    <h2>Eviction Strategy</h2>
+    <p>
+        The cache uses a "hand" pointer to iterate through the nodes. It searches for an unvisited node to evict. If it
+        finds a visited one, it resets the visited flag and continues.
+    </p>
+
+    <h2>Interactive Example</h2>
+    <p>Click the button below to simulate accessing a sequence of items: A, B, C, A, D.</p>
+    <button onclick="simulateCache()">Run Cache Simulation</button>
+    <div class="cache-container" id="cache"></div>
+    <div id="log"></div>
+
+    <h2>Example Implementation in Python</h2>
+    <pre><code>
+        class Node:
+    def __init__(self, value):
+        self.value = value
+        self.visited = False
+        self.next = None
+        self.prev = None
+
+
+class SieveCache:
+    def __init__(self, capacity):
+        self.capacity = capacity
+        self.cache = {}
+        self.head = None
+        self.tail = None
+        self.hand = None
+        self.size = 0
+
+    def add_to_head(self, node):
+        node.next = self.head
+        node.prev = None
+        if self.head:
+            self.head.prev = node
+        self.head = node
+        if self.tail is None:
+            self.tail = node
+        if self.hand is None:
+            self.hand = self.tail
+
+    def remove_node(self, node):
+        if node.prev:
+            node.prev.next = node.next
+        else:
+            self.head = node.next
+        if node.next:
+            node.next.prev = node.prev
+        else:
+            self.tail = node.prev
+
+    def _evict(self):
+        if self.hand is None:
+            self.hand = self.tail
+
+        start = self.hand
+        while self.hand and self.hand.visited:
+            self.hand.visited = False
+            self.hand = self.hand.prev or self.tail
+            if self.hand == start:
+                break  
+
+        node_to_remove = self.hand or self.tail
+        if node_to_remove:
+            self.hand = node_to_remove.prev or self.tail
+            del self.cache[node_to_remove.value]
+            self.remove_node(node_to_remove)
+            self.size -= 1
+
+    def access(self, x):
+        if x in self.cache:  # Cache Hit
+            node = self.cache[x]
+            node.visited = True
+        else:  # Cache Miss
+            if self.size == self.capacity:
+                self._evict()
+            new_node = Node(x)
+            self.add_to_head(new_node)
+            self.cache[x] = new_node
+            self.size += 1
+
+    def show_cache(self):
+        current = self.head
+        while current:
+            print(f'{current.value} (Visited: {current.visited})',
+                  end=' -> ' if current.next else '\n')
+            current = current.next
+
+</code></pre>
+
+
+    <h2>Benefits</h2>
+    <ul>
+        <li>Prevents pollution from one-time-use items</li>
+        <li>Gives frequently used items a second chance</li>
+        <li>Efficient memory usage</li>
+    </ul>
+    <h2>Visual Representation</h2>
+    <p>Below are some images to help visualize the Sieve Cache algorithm:</p>
+    <figure>
+        <img src="images/sieve_1.svg" alt="Sieve Cache Diagram" style="max-width: 100%; height: auto;" />
+        <figcaption>Figure 1: Miss Ratio comparison</figcaption>
+    </figure>
+
+    <h2>Conclusion</h2>
+    <p>
+        The sieve cache is a great choice for systems where cache entries have varying importance and the access pattern
+        is not entirely predictable. It's a smarter, more adaptive alternative to basic LRU or FIFO caches.
+    </p>
+
+
+    <script>
+        const sequence = ['A', 'B', 'C', 'A', 'D'];
+        let cache = [];
+        let capacity = 3;
+        let hand = 0;
+
+        function simulateCache() {
+            cache = [];
+            hand = 0;
+            document.getElementById('log').innerText = '';
+            updateDisplay();
+
+            sequence.forEach((item, idx) => {
+                setTimeout(() => handleAccess(item), idx * 1000);
+            });
+        }
+
+        function handleAccess(value) {
+            const log = document.getElementById('log');
+            let existing = cache.find(n => n.value === value);
+
+            if (existing) {
+                existing.visited = true;
+                log.innerText += `Cache hit: ${value}\n`;
+            } else {
+                log.innerText += `Cache miss: ${value}\n`;
+                if (cache.length >= capacity) {
+                    let evicted = false;
+                    let loops = 0;
+                    while (!evicted && loops < capacity) {
+                        let node = cache[hand];
+                        if (node.visited) {
+                            node.visited = false;
+                            hand = (hand + 1) % capacity;
+                            loops++;
+                        } else {
+                            log.innerText += `Evicting: ${node.value}\n`;
+                            cache.splice(hand, 1);
+                            evicted = true;
+                        }
+                    }
+                }
+                cache.unshift({ value, visited: false });
+                if (cache.length === 1) hand = 0;
+            }
+            updateDisplay();
+        }
+
+        function updateDisplay() {
+            const container = document.getElementById('cache');
+            container.innerHTML = '';
+            cache.forEach((node, i) => {
+                const div = document.createElement('div');
+                div.className = 'node';
+                if (node.visited) div.classList.add('visited');
+                div.textContent = node.value;
+                if (i === hand) div.style.border = '3px solid red';
+                container.appendChild(div);
+            });
+        }
+
+        function toggleDarkMode() {
+            document.body.classList.toggle('dark-mode');
+            const isDarkMode = document.body.classList.contains('dark-mode');
+            localStorage.setItem('darkMode', isDarkMode ? 'enabled' : 'disabled');
+        }
+
+        document.getElementById('toggleTheme').addEventListener('click', toggleDarkMode);
+
+        // Persist theme across sessions
+        window.onload = function () {
+            const darkMode = localStorage.getItem('darkMode');
+            if (darkMode === 'enabled') {
+                document.body.classList.add('dark-mode');
+            }
+        };
+
+    </script>
+</body>
+
+</html>
