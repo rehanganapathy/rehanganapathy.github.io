@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Understanding Segcache: Efficient In-Memory Caching</title>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        h1,
+        h2,
+        h3 {
+            color: #2c3e50;
+        }
+
+        code {
+            background: #f4f4f4;
+            padding: 2px 5px;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+
+        pre {
+            background: #f4f4f4;
+            padding: 10px;
+            overflow-x: auto;
+            border-radius: 4px;
+        }
+
+        ul {
+            padding-left: 20px;
+        }
+
+        li {
+            margin-bottom: 8px;
+        }
+
+        a {
+            color: #3498db;
+            text-decoration: none;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+
+        figure {
+            margin: 20px 0;
+            text-align: center;
+        }
+
+        figcaption {
+            font-style: italic;
+            color: #555;
+            margin-top: 5px;
+        }
+
+        body.dark-mode {
+            background-color: #030f22;
+            color: #ffffff;
+        }
+
+        body.dark-mode h1,
+        body.dark-mode h2,
+        body.dark-mode h3 {
+            color: #ffffff;
+        }
+
+        body.dark-mode code,
+        body.dark-mode pre {
+            background: #333333;
+        }
+
+        body.dark-mode a {
+            color: #5dade2;
+        }
+
+        body.dark-mode figcaption {
+            color: #bbb;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            margin: 10px 0;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            background-color: #e0e0e0;
+            color: #333;
+            transition: background-color 0.3s ease;
+        }
+
+        button:hover {
+            background-color: #ccc;
+        }
+
+        body.dark-mode button {
+            background-color: #444;
+            color: #fff;
+        }
+
+        body.dark-mode button:hover {
+            background-color: #666;
+        }
+
+        #toggleTheme {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        #toggleTheme svg {
+            width: 20px;
+            height: 20px;
+        }
+    </style>
+</head>
+
+<body>
+    <button id="toggleTheme">
+        <span id="themeIcon">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24">
+                <path
+                    d="M21.752 15.002A9.718 9.718 0 0112 21.75a9.75 9.75 0 01-8.485-14.68.75.75 0 011.235-.16 7.5 7.5 0 0010.34 10.34.75.75 0 01.16 1.235z" />
+            </svg>
+        </span>
+        <span>Toggle Theme</span>
+    </button>
+
+    <h1>Rethinking In-Memory Caching: A Deep Dive into Segcache</h1>
+
+    <p>
+        Modern web services, from social media feeds to e-commerce platforms, rely heavily on speed. A crucial component
+        delivering this speed is the in-memory key-value cache, like Memcached or Redis. These caches store frequently
+        accessed data in fast DRAM, reducing database load and response times. However, as web services scale and
+        demands grow, traditional caching systems face significant challenges, especially when dealing with vast numbers
+        of small data objects and managing their lifecycles efficiently.
+    </p>
+    <p>
+        Enter <strong>Segcache</strong>, a novel in-memory caching system presented in the <a
+            href="https://www.usenix.org/conference/nsdi21/presentation/yang-juncheng" target="_blank"
+            rel="noopener noreferrer">NSDI '21 paper</a> by Yang, Yue, and Rashmi. Segcache promises significant
+        improvements in memory efficiency and scalability without sacrificing throughput, tackling several persistent
+        problems in cache design head-on.
+    </p>
+
+    <h2>The Challenges with Traditional Caching</h2>
+    <p>
+        The paper highlights several inefficiencies in widely used caching systems:
+    </p>
+    <ul>
+        <li><strong>Metadata Overhead:</strong> Caches store metadata alongside the actual data. Systems like Memcached
+            add over 50 bytes of metadata per object. When caching millions or billions of small objects (often just 10s
+            to 1000s of bytes), this overhead consumes a substantial portion of expensive DRAM. Research aiming to
+            improve cache eviction often <em>increases</em> this metadata further.</li>
+        <li><strong>TTL Expiration Inefficiency:</strong> Time-To-Live (TTL) is widely used for data freshness or
+            implicit deletion. However, proactively removing expired objects is often inefficient. Methods like lazy
+            deletion leave expired data occupying memory. Proactive methods like full cache scanning or random sampling
+            can be resource-intensive or ineffective.</li>
+        <li><strong>Memory Fragmentation:</strong> Standard memory allocators (<code>malloc</code>) can lead to external
+            fragmentation, while slab allocators used by Memcached suffer from internal fragmentation and potential
+            "slab calcification". Rebalancing slabs can be complex and even increase cache misses.</li>
+        <li><strong>Scalability Bottlenecks:</strong> Traditional designs often struggle to scale linearly with
+            increasing CPU cores due to locking contention in data structures like hash tables and LRU queues.</li>
+    </ul>
+
+    <h2>Segcache: A Segment-Structured Approach</h2>
+    <p>
+        Segcache introduces a redesign based on <strong>segments</strong> – small, fixed-size (e.g., 1MB by default)
+        logs where objects are stored. Its design philosophy centers on being proactive, maximizing sharing, and
+        performing bulk operations.
+    </p>
+
+    <h2>Key Innovations</h2>
+    <p>Segcache introduces several novel features:</p>
+    <ul>
+        <li>
+            <strong>TTL-Indexed Segment Chains:</strong> Segcache organizes segments based on the approximate TTL of the
+            objects they contain using TTL buckets. Within each bucket, segments are linked into a chain, sorted by
+            creation time.
+            <br /><em>Benefit:</em> This enables extremely efficient proactive expiration via bulk segment removal.
+        </li>
+        <li>
+            <strong>Metadata Sharing ("Object Sharing Economy"):</strong> It drastically reduces per-object metadata to
+            just <strong>5 bytes</strong> by sharing information (like creation time, TTL, reference counters, access
+            timestamps, CAS values) at the segment and hash bucket level.
+            <br /><em>Benefit:</em> Dramatically improves memory efficiency, especially for small objects.
+        </li>
+        <li>
+            <strong>Segment-Level Eviction & Merge:</strong> Eviction happens at the segment level. It uses a
+            merge-based approach, combining N segments into one new segment, selectively retaining the most important
+            objects (aiming to keep about 1/Nth of the bytes).
+            <br /><em>Benefit:</em> Bulk operation is more efficient than object-level eviction.
+        </li>
+        <li>
+            <strong>Approximate & Smoothed Frequency Counter (ASFC):</strong> A novel 1-byte counter ranks objects by
+            frequency/size for merge-based eviction. It's accurate for less popular items and smoothed to resist bursts.
+            Frequencies are reset during eviction.
+            <br /><em>Benefit:</em> Provides an efficient, effective, and burst-resistant way to rank objects.
+        </li>
+        <li>
+            <strong>Scalable Design:</strong> Uses bulk chaining in the hash table, minimal locking due to segment-level
+            operations, and thread-local active segments for writes.
+            <br /><em>Benefit:</em> Achieves near-linear scalability with multiple CPU cores.
+        </li>
+    </ul>
+    <h3>Write Operation (Adding or Updating an Object)</h3>
+    <ol>
+        <li><strong>Determine TTL Bucket</strong>: For each write (e.g., <code>SET key value TTL</code>), TTL is mapped
+            to a predefined bucket using rounded-down values.</li>
+        <li><strong>Find Target Segment</strong>: Segcache locates the tail segment of the TTL bucket chain, where data
+            is still accepted.</li>
+        <li><strong>Append Object Data</strong>: Metadata, key, and value are appended sequentially to the segment.
+            Older versions are invalidated implicitly.</li>
+        <li><strong>Update Hash Table</strong>: A new entry is added to the hash table with the segment location, a
+            12-bit tag, and a frequency counter.</li>
+        <li><strong>Handle Full Segment</strong>: When a segment fills, a new one is allocated. If unavailable, eviction
+            is triggered.</li>
+    </ol>
+    <blockquote>See Figure 3 in the Segcache paper for a visual of the write path.</blockquote>
+
+    <h3>Read Operation (Retrieving an Object)</h3>
+    <ol>
+        <li><strong>Hash Table Lookup</strong>: The key is hashed to locate the bucket.</li>
+        <li><strong>Search Within Bucket</strong>: Scan for a matching 12-bit tag and verify with a full key check if
+            needed.</li>
+        <li><strong>Retrieve Location</strong>: Extract Segment ID and offset.</li>
+        <li><strong>Read Object Data</strong>: Read full object (key, value, metadata) from the segment.</li>
+        <li><strong>Check Validity</strong>: Expired segments are already purged in background threads.</li>
+        <li><strong>Increment Frequency Counter</strong>: If a hit, increment the ASFC (rate-limited).</li>
+        <li><strong>Return Value</strong>: If found, return the value; else, it’s a cache miss.</li>
+    </ol>
+
+
+    <h2>Performance Highlights</h2>
+    <p>
+        Evaluated against systems like Memcached, PCache (Twitter's variant), r-LHD, and r-Hyperbolic using production
+        traces from Twitter, Segcache showed impressive results:
+    </p>
+    <ul>
+        <li><strong>Memory Efficiency:</strong> Reduced miss ratios by up to 58% compared to the best alternative.
+            Achieved target miss ratios with significantly less memory (up to 88% less than PCache, 56-64% less than
+            s-Memcached/r-Hyperbolic).</li>
+        <li><strong>Throughput:</strong> Achieved high single-thread throughput, comparable to or better than optimized
+            systems like PCache, and significantly faster (up to 2.5-4x) than others like s-Memcached or r-LHD.</li>
+        <li><strong>Scalability:</strong> Demonstrated near-linear scalability, achieving a 19.9x speedup on 24 threads
+            (reaching >70 Million QPS), vastly outperforming Memcached's 3.4x speedup.</li>
+    </ul>
+
+    <h2>Visual Representation</h2>
+    <p>Below is a conceptual diagram illustrating the high-level architecture of Segcache:</p>
+    <figure>
+        <img src="images/segacache.png" alt="Segcache Architecture Diagram"
+            style="max-width: 100%; height: auto; border:1px dashed #ccc; padding: 20px; box-sizing: border-box;" />
+        <figcaption>Figure 1: Conceptual overview of Segcache components (TTL Buckets, Object Store with Segments, Hash
+            Table)</figcaption>
+    </figure>
+
+
+    <h2>Why Segcache Matters</h2>
+    <p>
+        Segcache offers a compelling alternative to traditional in-memory caches. Its ability to significantly reduce
+        memory footprint while maintaining or improving throughput and scaling effectively addresses major pain points
+        in large-scale systems.
+    </p>
+    <ul>
+        <li><strong>Cost Savings:</strong> Reduced memory usage translates directly to lower hardware costs and energy
+            consumption.</li>
+        <li><strong>Performance:</strong> Higher throughput and better scalability allow systems to handle more load
+            with fewer resources.</li>
+        <li><strong>Efficiency:</strong> Timely expiration prevents wasted memory and improves cache effectiveness. The
+            minimal metadata overhead is particularly beneficial for the common case of caching many small objects.</li>
+        <li><strong>Practicality:</strong> Implemented within Twitter's Pelikan framework and <a
+                href="http://www.github.com/twitter/pelikan" target="_blank" rel="noopener noreferrer">open-sourced</a>,
+            Segcache is designed for real-world production use.</li>
+    </ul>
+
+
+    <h2>Conclusion</h2>
+    <p>
+        Segcache demonstrates that by rethinking core cache design principles – specifically how metadata is handled and
+        how expiration and eviction are performed – it's possible to build in-memory caches that are simultaneously more
+        memory-efficient, faster, and more scalable. Its segment-structured design, focused on bulk operations and
+        metadata sharing, offers a promising direction for future caching systems facing the demands of modern,
+        data-intensive applications.
+    </p>
+
+    <script>
+        // Theme toggle functionality
+        function toggleDarkMode() {
+            document.body.classList.toggle('dark-mode');
+            const isDarkMode = document.body.classList.contains('dark-mode');
+            localStorage.setItem('darkMode', isDarkMode ? 'enabled' : 'disabled');
+
+            // Update icon based on theme
+            const themeIcon = document.getElementById('themeIcon');
+            if (isDarkMode) {
+                // Sun Icon for Dark Mode
+                themeIcon.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 2.25a.75.75 0 01.75.75v2.25a.75.75 0 01-1.5 0V3a.75.75 0 01.75-.75zM7.5 12a4.5 4.5 0 119 0 4.5 4.5 0 01-9 0zM18.894 6.166a.75.75 0 00-1.06-1.06l-1.591 1.59a.75.75 0 101.06 1.061l1.591-1.59zM21.75 12a.75.75 0 01-.75.75h-2.25a.75.75 0 010-1.5h2.25a.75.75 0 01.75.75zM17.834 18.894a.75.75 0 001.06-1.06l-1.59-1.591a.75.75 0 10-1.061 1.06l1.59 1.591zM12 18a.75.75 0 01.75.75v2.25a.75.75 0 01-1.5 0V18.75a.75.75 0 01.75-.75zM7.166 17.834a.75.75 0 00-1.06 1.06l1.59 1.591a.75.75 0 101.061-1.06l-1.59-1.591zM6.25 12a.75.75 0 01-.75.75H3a.75.75 0 010-1.5h2.5a.75.75 0 01.75.75zM6.166 7.166a.75.75 0 00-1.06 1.06l1.591 1.59a.75.75 0 101.06-1.061l-1.591-1.59z"/>
+                    </svg>`;
+            } else {
+                // Moon Icon for Light Mode
+                themeIcon.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M21.752 15.002A9.718 9.718 0 0112 21.75a9.75 9.75 0 01-8.485-14.68.75.75 0 011.235-.16 7.5 7.5 0 0010.34 10.34.75.75 0 01.16 1.235z" />
+                    </svg>`;
+            }
+        }
+
+        document.getElementById('toggleTheme').addEventListener('click', toggleDarkMode);
+
+        // Persist theme across sessions and set initial icon
+        window.onload = function () {
+            const darkMode = localStorage.getItem('darkMode');
+            if (darkMode === 'enabled') {
+                toggleDarkMode(); // Apply dark mode and set icon
+                toggleDarkMode(); // Toggle back to ensure correct initial state if already dark
+            } else {
+                // Ensure light mode icon is set initially
+                const themeIcon = document.getElementById('themeIcon');
+                themeIcon.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M21.752 15.002A9.718 9.718 0 0112 21.75a9.75 9.75 0 01-8.485-14.68.75.75 0 011.235-.16 7.5 7.5 0 0010.34 10.34.75.75 0 01.16 1.235z" />
+                    </svg>`;
+            }
+        };
+
+    </script>
+</body>
+
+</html>
