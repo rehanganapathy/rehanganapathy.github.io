@@ -1,0 +1,626 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Embeddings for Text: Foundations, Methods, and Applications</title>
+  <meta name="description"
+    content="A comprehensive academic-style article on text embeddings, from TF–IDF to Word2Vec, BERT, and LLM embeddings, with math, code, and diagrams." />
+
+  <!-- MathJax for equations -->
+  <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+  <style>
+    :root {
+      --bg: #0b0c10;
+      --panel: #12131a;
+      --ink: #e8ecf1;
+      --muted: #a8b3c7;
+      --accent: #67e8f9;
+      --accent-2: #a78bfa;
+      --code-bg: #0f172a;
+      --border: #1f2430;
+      --green: #34d399;
+      --orange: #fb923c;
+      --red: #f87171;
+    }
+
+    html,
+    body {
+      height: 100%;
+    }
+
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica Neue, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+      color: var(--ink);
+      background: linear-gradient(180deg, #0b0c10, #0b0c10 200px, #0b0c10 100%);
+      line-height: 1.6;
+    }
+
+    .wrap {
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      gap: 24px;
+      max-width: 1300px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    nav {
+      position: sticky;
+      top: 16px;
+      align-self: start;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px;
+      height: fit-content;
+    }
+
+    nav h2 {
+      font-size: 14px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin: 0 0 10px;
+    }
+
+    nav a {
+      color: var(--muted);
+      text-decoration: none;
+      display: block;
+      padding: 6px 8px;
+      border-radius: 8px;
+    }
+
+    nav a:hover {
+      color: var(--ink);
+      background: rgba(103, 232, 249, .08);
+    }
+
+    nav .sub {
+      padding-left: 10px;
+      font-size: 14px;
+    }
+
+    main {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 28px 28px 80px;
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: 34px;
+      letter-spacing: .3px;
+    }
+
+    header .meta {
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    h2 {
+      margin-top: 40px;
+      font-size: 26px;
+      border-left: 4px solid var(--accent);
+      padding-left: 10px;
+    }
+
+    h3 {
+      margin-top: 28px;
+      font-size: 20px;
+      color: var(--accent);
+    }
+
+    h4 {
+      margin-top: 20px;
+      font-size: 16px;
+      color: var(--accent-2);
+    }
+
+    p,
+    li {
+      color: #e2e8f0;
+    }
+
+    code.inline {
+      background: rgba(167, 139, 250, .12);
+      border: 1px solid var(--border);
+      padding: 2px 6px;
+      border-radius: 6px;
+    }
+
+    pre {
+      background: var(--code-bg);
+      color: #e5e7eb;
+      padding: 14px 16px;
+      border-radius: 12px;
+      overflow: auto;
+      border: 1px solid var(--border);
+    }
+
+    pre code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 13px;
+    }
+
+    .diagram {
+      background: #0b1220;
+    }
+
+    .callout {
+      border-left: 3px solid var(--accent-2);
+      background: rgba(167, 139, 250, .08);
+      padding: 12px 14px;
+      border-radius: 8px;
+    }
+
+    .kpi {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin: 6px 0 0;
+    }
+
+    .kpi .pill {
+      background: rgba(103, 232, 249, .08);
+      border: 1px solid var(--border);
+      padding: 8px 10px;
+      border-radius: 12px;
+      font-size: 13px;
+      color: var(--muted)
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 14px 0;
+      font-size: 14px;
+    }
+
+    table th,
+    table td {
+      border: 1px solid var(--border);
+      padding: 8px 10px;
+    }
+
+    table th {
+      background: rgba(103, 232, 249, .06);
+      text-align: left;
+    }
+
+    footer {
+      margin-top: 46px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    a {
+      color: var(--accent);
+    }
+
+    .tag {
+      display: inline-block;
+      padding: 2px 8px;
+      border: 1px solid var(--border);
+      background: rgba(52, 211, 153, .08);
+      color: var(--green);
+      border-radius: 999px;
+      font-size: 12px;
+      margin-right: 6px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <nav>
+      <h2>Contents</h2>
+      <a href="#abstract">Abstract</a>
+      <a href="#intro">1. Introduction</a>
+      <a class="sub" href="#background">2. From Statistical to Neural Embeddings</a>
+      <a class="sub" href="#tfidf">2.1 Statistical (TF–IDF)</a>
+      <a class="sub" href="#word2vec">2.2 Neural (Word2Vec)</a>
+      <a class="sub" href="#cbow">CBOW Details</a>
+      <a class="sub" href="#skipgram">Skip‑Gram Details</a>
+      <a class="sub" href="#contextual">2.3 Contextual Embeddings</a>
+      <a class="sub" href="#bert-example">BERT Example</a>
+      <a class="sub" href="#sbert">Sentence‑BERT Example</a>
+      <a href="#llm">3. Embeddings in LLMs</a>
+      <a class="sub" href="#extract">3.1 Extract & Save</a>
+      <a class="sub" href="#load">3.2 Load in a Custom Model</a>
+      <a class="sub" href="#similarity">3.3 Similarity Search</a>
+      <a href="#apps">4. Applications</a>
+      <a href="#challenges">5. Challenges</a>
+      <a href="#conclusion">6. Conclusion</a>
+    </nav>
+
+    <main>
+      <header>
+        <h1>Embeddings for Text: Foundations, Methods, and Applications</h1>
+        <p class="meta">Author: <strong>Rehan Ganapathy</strong> · Date: <time datetime="2025-09-01">September 1,
+            2025</time></p>
+      </header>
+
+      <section id="abstract">
+        <h2>Abstract</h2>
+        <p>Embeddings are the semantic backbone of modern natural language processing (NLP). They transform raw text
+          into dense vectors that capture similarity, meaning, and context, enabling machines to process language
+          effectively. From early statistical methods like TF–IDF to neural embeddings such as Word2Vec, and later to
+          contextual embeddings from transformers (BERT, GPT), embeddings have evolved into powerful representations
+          that drive state‑of‑the‑art large language models (LLMs). This article presents a comprehensive overview of
+          embeddings: their mathematical foundations, evolution, implementations with code, diagrams, and applications.
+        </p>
+      </section>
+
+      <section id="intro">
+        <h2>1. Introduction</h2>
+        <p>Raw text cannot be directly understood by computers. Early representations such as one‑hot encoding and
+          bag‑of‑words (BoW) allowed text to be stored as vectors, but these lacked semantic meaning: synonyms,
+          analogies, and polysemy were ignored. <em>Embeddings</em> solve this by mapping text into <strong>dense,
+            low‑dimensional vector spaces</strong> where geometry reflects meaning: similar words appear close,
+          analogies can be represented linearly, and context modifies representation.</p>
+      </section>
+
+      <section id="background">
+        <h2>2. From Statistical to Neural Embeddings</h2>
+        <p>The evolution of vector representations spans three major phases: (i) statistical term weighting (TF–IDF,
+          LSA), (ii) neural predictive embeddings (Word2Vec, GloVe, FastText), and (iii) contextual representations
+          learned by transformers (ELMo, BERT, GPT). Each step improved semantic fidelity and downstream utility.</p>
+      </section>
+
+      <section id="tfidf">
+        <h3>2.1 Statistical Embeddings (TF–IDF)</h3>
+        <p><span class="tag">Formula</span> TF–IDF assigns weight to term <em>t</em> in document <em>d</em> as</p>
+        <p>\[\text{TF}(t,d) = \frac{\text{count}(t,d)}{\text{total terms in } d},\qquad \text{IDF}(t) = \log
+          \frac{N}{1+n_t}\]</p>
+        <p>\[\text{TF–IDF}(t,d) = \text{TF}(t,d)\times \text{IDF}(t).\]</p>
+        <div class="callout">
+          <p><strong>Intuition.</strong> Terms frequent in a document but rare in the corpus get higher weight,
+            improving retrieval and keyword extraction. However, TF–IDF vectors are sparse and ignore semantics (e.g.,
+            <em>cat</em> vs <em>dog</em>).
+          </p>
+        </div>
+
+        <h4>Example: TF–IDF on Tiny Shakespeare</h4>
+        <pre><code class="language-python"># Load the dataset
+with open("tinyshakespeare.txt", "r") as file:
+    corpus = file.read()
+
+print(f"Text corpus includes {len(corpus.split())} words.")
+
+# Split into 10 documents
+N = len(corpus) // 10
+documents = [corpus[i:i+N] for i in range(0, len(corpus), N)]
+documents = documents[:-1]  # drop the last residue
+
+from sklearn.feature_extraction.text import TfidfVectorizer
+
+# Create TF–IDF embeddings
+vectorizer = TfidfVectorizer()
+embeddings = vectorizer.fit_transform(documents)
+words = vectorizer.get_feature_names_out()
+
+print(f"Word count: {len(words)} e.g.: {words[:10]}")
+print(f"Embedding shape: {embeddings.shape}")
+# Output:
+# Text corpus includes 202651 words.
+# Word count: 11446 e.g.: ['abandon' 'abase' 'abate' 'abated' 'abbey' 'abbot' 'abed' 'abel' 'abet' 'abhor']
+# Embedding shape: (10, 11446)</code></pre>
+      </section>
+
+      <section id="word2vec">
+        <h3>2.2 Neural Embeddings (Word2Vec)</h3>
+        <p><span class="tag">Idea</span> Learn word vectors by solving a prediction task over local context windows. Two
+          architectures are standard: <strong>CBOW</strong> (predict target from context) and <strong>Skip‑Gram</strong>
+          (predict context from target). These dense vectors exhibit striking linear structures (e.g., analogies).</p>
+
+        <h4>Analogy Demo with Pretrained Google News Vectors</h4>
+        <pre><code class="language-python">import gensim
+
+# Load pretrained Word2Vec embeddings (3M vocab, 300 dims)
+model = gensim.models.KeyedVectors.load_word2vec_format(
+    'GoogleNews-vectors-negative300.bin.gz',
+    binary=True
+)
+
+print(f"The embedding size: {model.vector_size}")
+print(f"The vocabulary size: {len(model)}")
+
+# Vector arithmetic: italy - rome + london = ?
+print(model.most_similar(positive=['london', 'italy'], negative=['rome']))
+
+# Vector arithmetic: doctor - man + woman = ?
+print(model.most_similar(positive=['woman', 'doctor'], negative=['man']))
+# Example output:
+# [('england', 0.574), ('europe', 0.537), ('liverpool', 0.514), ...]
+# [('gynecologist', 0.709), ('nurse', 0.648), ('doctors', 0.647), ...]</code></pre>
+      </section>
+
+      <section id="cbow">
+        <h4>CBOW (Continuous Bag‑of‑Words): Objective & Flow</h4>
+        <p>Given context words within a window around position <em>t</em>, CBOW predicts the center word \(w_t\). Let
+          \(C\) be the number of context tokens used. With input embeddings \(v_w\) and output embeddings \(u_w\), CBOW
+          maximizes:</p>
+        <p>\[\log p(w_t\mid w_{t-C},\dots,w_{t-1},w_{t+1},\dots,w_{t+C}) = \log \text{softmax}(u_{w_t}^{\top}\,
+          \bar{v}),\]</p>
+        <p>where \(\bar{v} = \frac{1}{2C}\sum_{c\in\mathcal{N}(t)} v_{w_c}\) is the average of context vectors. In
+          practice, <em>negative sampling</em> replaces the full softmax to reduce cost:</p>
+        <p>\[\mathcal{L}_{\text{CBOW}} = -\log \sigma(u_{w_t}^{\top}\bar{v}) - \sum_{i=1}^{k} \mathbb{E}_{w_i\sim
+          P_n}\,\log \sigma(-u_{w_i}^{\top}\bar{v}).\]</p>
+
+        <h4>Diagram: CBOW (predict center from context)</h4>
+        <pre class="diagram"><code>Context window (size C)
+
+  w_{t-2}    w_{t-1}             w_{t+1}    w_{t+2}
+     |           |                   |           |
+ [Lookup]    [Lookup]             [Lookup]   [Lookup]
+     |           |                   |           |
+     v           v                   v           v
+  v_{t-2}     v_{t-1}             v_{t+1}    v_{t+2}
+       \        |                    |        /
+        \       |                    |       /
+             [Average / Sum]  -->  \bar{v}
+                     |
+                 [Linear]
+                     |
+                 [Softmax]
+                     |
+                predict w_t
+        </code></pre>
+
+        <div class="callout">
+          <p><strong>Notes.</strong> CBOW is fast and stable on small datasets; averaging context smooths noise. It can
+            underemphasize rare words compared to Skip‑Gram.</p>
+        </div>
+      </section>
+
+      <section id="skipgram">
+        <h4>Skip‑Gram: Objective & Flow</h4>
+        <p>Skip‑Gram inverts CBOW: given center word \(w_t\), predict each context word \(w_c\in\mathcal{N}(t)\). The
+          (negative sampling) loss sums over contexts:</p>
+        <p>\[\mathcal{L}_{\text{SG}} = -\sum_{c\in\mathcal{N}(t)} \big[\log \sigma(u_{w_c}^{\top} v_{w_t}) +
+          \sum_{i=1}^{k} \mathbb{E}_{w_i\sim P_n}\, \log \sigma(-u_{w_i}^{\top} v_{w_t}) \big].\]</p>
+        <h4>Diagram: Skip‑Gram (predict context from center)</h4>
+        <pre class="diagram"><code>Center word at position t
+
+               w_t
+                |
+            [Lookup]
+                |
+              v_{t}
+        /      |       \
+       /       |        \
+[Linear]   [Linear]   [Linear]
+   |          |           |
+[Softmax] [Softmax]   [Softmax]
+   |          |           |
+ predict    predict     predict
+ w_{t-2}    w_{t-1}     w_{t+1}  ...
+        </code></pre>
+        <div class="callout">
+          <p><strong>Trade‑off.</strong> Skip‑Gram better captures rare words and fine‑grained semantics but is slower
+            since it predicts multiple targets per center token.</p>
+        </div>
+      </section>
+
+      <section id="contextual">
+        <h3>2.3 Contextual Embeddings</h3>
+        <p><span class="tag">Why</span> Static embeddings assign one vector per word type, failing on polysemy (e.g.,
+          <em>bank</em> as river edge vs. financial institution) and context sensitivity. <span class="tag">How</span>
+          Transformers compute <em>context‑conditioned</em> vectors via self‑attention, so each token’s embedding
+          depends on all others in the sequence.
+        </p>
+
+        <h4>Self‑Attention (single head)</h4>
+        <p>For queries \(Q\), keys \(K\), values \(V\):</p>
+        <p>\[\text{Attention}(Q,K,V) = \text{softmax}\!\left(\frac{QK^{\top}}{\sqrt{d_k}}\right) V.\]</p>
+
+        <h4>Diagram: Transformer Self‑Attention (token‑wise)</h4>
+        <pre class="diagram"><code>Tokens → [Embed + Positional Encoding] → Transformer Layers
+
+  x_1   x_2   x_3  ...  x_T
+   |     |     |         |
+  e_1   e_2   e_3  ...  e_T   (input embeddings)
+   |     |     |         |
+  ┌───────────────────────────┐
+  |  For each layer (multi‑head self‑attention + MLP):
+  |   Q = eW_Q,  K = eW_K,  V = eW_V
+  |   A = softmax(QKᵀ/√d_k)
+  |   h = A V    (per head, then concatenated)
+  |   e ← LayerNorm(e + h) → MLP → LayerNorm
+  └───────────────────────────┘
+   |     |     |         |
+  h_1   h_2   h_3  ...  h_T   (contextual embeddings)
+        </code></pre>
+
+        <h4 id="bert-example">Example: BERT Contextual Embeddings</h4>
+        <pre><code class="language-python">from transformers import AutoTokenizer, AutoModel
+import torch
+
+# Load pre-trained BERT
+tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+model = AutoModel.from_pretrained("bert-base-uncased")
+
+sentence = "The bank will not lend money near the river bank."
+inputs = tokenizer(sentence, return_tensors="pt")
+
+with torch.no_grad():
+    outputs = model(**inputs)
+
+token_embeddings = outputs.last_hidden_state
+print(token_embeddings.shape)  # (batch, seq_len, hidden_dim)
+
+sentence_embedding = token_embeddings[:,0,:]  # [CLS]
+print(sentence_embedding.shape)
+# e.g., torch.Size([1, 12, 768]) and torch.Size([1, 768])</code></pre>
+
+        <h4 id="sbert">Example: Sentence‑BERT (sentence‑level similarity)</h4>
+        <pre><code class="language-python">from sentence_transformers import SentenceTransformer, util
+
+model = SentenceTransformer("all-MiniLM-L6-v2")
+
+sentences = [
+    "A man is playing guitar.",
+    "Someone is performing music.",
+    "The dog is sleeping on the floor."
+]
+
+embeddings = model.encode(sentences, convert_to_tensor=True)
+
+print("Similarity (music vs guitar):",
+      util.cos_sim(embeddings[0], embeddings[1]).item())
+print("Similarity (music vs dog):",
+      util.cos_sim(embeddings[0], embeddings[2]).item())
+# ~0.82 vs ~0.21</code></pre>
+      </section>
+
+      <section id="llm">
+        <h2>3. Embeddings in Large Language Models (LLMs)</h2>
+        <p>LLMs use an <em>input embedding layer</em> (token lookup table) to initialize token vectors, and then
+          transform them through multiple layers into <em>contextual embeddings</em> (hidden states). The input
+          embedding matrix itself can be extracted and reused directly for tasks like similarity search.</p>
+
+        <section id="extract">
+          <h3>3.1 Extracting & Saving Input Embeddings (Hugging Face)</h3>
+          <pre><code class="language-python">import torch
+from transformers import AutoTokenizer, AutoModel
+
+tokenizer_name = "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B"
+model_name = tokenizer_name
+
+# Load tokenizer & model
+tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
+tokenizer.add_special_tokens({'pad_token': '[PAD]'})
+model = AutoModel.from_pretrained(model_name)
+
+# Extract embeddings layer
+embeddings = model.get_input_embeddings()
+print(f"Extracted Embeddings Layer: {embeddings}")
+
+# Save weights (shape: [vocab_size, embedding_dim])
+torch.save(embeddings.state_dict(), "embeddings_qwen.pth")</code></pre>
+        </section>
+
+        <section id="load">
+          <h3>3.2 Loading Pretrained Embeddings into a Lightweight Model</h3>
+          <pre><code class="language-python">import torch
+import torch.nn as nn
+from transformers import AutoTokenizer
+
+class EmbeddingModel(nn.Module):
+    def __init__(self, vocab_size, embedding_dim):
+        super().__init__()
+        self.embedding = nn.Embedding(vocab_size, embedding_dim)
+    def forward(self, input_ids):
+        return self.embedding(input_ids)
+
+vocab_size = 151936
+dimensions = 1536
+model = EmbeddingModel(vocab_size, dimensions)
+
+saved = torch.load("embeddings_qwen.pth")
+if 'weight' not in saved:
+    raise KeyError("No 'weight' key in saved embeddings")
+
+embeddings_tensor = saved['weight']
+if embeddings_tensor.size() != (vocab_size, dimensions):
+    raise ValueError(f"Expected ({vocab_size}, {dimensions}), got {embeddings_tensor.size()}")
+
+model.embedding.weight.data = embeddings_tensor
+model.eval()
+
+tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B")</code></pre>
+        </section>
+
+        <section id="similarity">
+          <h3>3.3 Similarity Search over the Embedding Space</h3>
+          <pre><code class="language-python">import torch
+
+# Cosine-similarity search against the entire vocab matrix
+def find_similar_embeddings(target_embedding, n=10):
+    if not isinstance(target_embedding, torch.Tensor):
+        target_embedding = torch.tensor(target_embedding)
+    all_embeddings = model.embedding.weight
+    sims = torch.nn.functional.cosine_similarity(target_embedding.unsqueeze(0), all_embeddings)
+    top_scores, top_indices = torch.topk(sims, n)
+    results = [(tokenizer.decode(idx), score.item()) for idx, score in zip(top_indices, top_scores)]
+    return results
+
+# Convert a prompt into token embeddings (using the lightweight embedding model)
+def prompt_to_embeddings(prompt: str):
+    tokens = tokenizer(prompt, return_tensors="pt")
+    input_ids = tokens['input_ids']
+    outputs = model(input_ids)              # shape: [1, seq_len, dim]
+    token_id_list = tokenizer.encode(prompt, add_special_tokens=True)
+    token_str = [tokenizer.decode(t, skip_special_tokens=True) for t in token_id_list]
+    return token_id_list, outputs, token_str
+
+# Pretty‑print helper
+def print_tokens_and_embeddings(text: str, max_dims=8):
+    token_ids, embeds, tokens = prompt_to_embeddings(text)
+    print(f"Sequence length: {len(token_ids)}\n")
+    for t_id, t_str, vec in zip(token_ids, tokens, embeds[0]):
+        dims = ", ".join([f"{v:.4f}" for v in vec[:max_dims].tolist()])
+        print(f"Token ID {t_id:>6} | {t_str!r:>15} | [{dims}, ...]")
+
+print_tokens_and_embeddings("HTML coders are not considered programmers")
+# Example (truncated) output:
+# Token ID   5835 |         'HTML' | [-0.0186, 0.0009, 0.0110, ...]
+# Token ID  54846 | '#programmers' | [-0.0479, 0.0579, -0.0693, ...]</code></pre>
+        </section>
+      </section>
+
+      <section id="apps">
+        <h2>4. Applications</h2>
+        <ul>
+          <li><strong>Semantic Search & Retrieval:</strong> embed queries and passages, retrieve via nearest neighbors
+            (cosine).
+          </li>
+          <li><strong>Clustering & Topic Modeling:</strong> group documents in embedding space; visualize with
+            PCA/t‑SNE/UMAP.</li>
+          <li><strong>Recommendations:</strong> match users/items using textual or multimodal descriptors.</li>
+          <li><strong>RAG Pipelines:</strong> encode knowledge chunks; retrieve to condition an LLM.</li>
+          <li><strong>Bias/Fairness Audits:</strong> probe associations encoded in vectors; mitigate with debiasing.
+          </li>
+          <li><strong>Multimodal AI:</strong> joint text‑image‑audio spaces enable cross‑modal retrieval and grounding.
+          </li>
+        </ul>
+      </section>
+
+      <section id="challenges">
+        <h2>5. Challenges</h2>
+        <ul>
+          <li><strong>Bias:</strong> embeddings inherit stereotypes from data; evaluation and mitigation are essential.
+          </li>
+          <li><strong>Interpretability:</strong> high‑dimensional geometry is hard to explain; tools are improving but
+            limited.</li>
+          <li><strong>Efficiency:</strong> larger dims → more memory/latency; consider pruning, quantization, or smaller
+            models.</li>
+          <li><strong>Domain Shift:</strong> contextual models can drift on out‑of‑domain text; consider fine‑tuning or
+            adapters.</li>
+        </ul>
+      </section>
+
+      <section id="conclusion">
+        <h2>6. Conclusion</h2>
+        <p>Embeddings have progressed from <em>statistical term‑weights</em> (TF–IDF) to <em>neural predictive
+            vectors</em> (Word2Vec), to <em>contextual transformer states</em> (BERT/GPT), and now to <em>LLM‑scale</em>
+          representations that power search, RAG, and reasoning. They remain the core bridge between human language and
+          machine computation.</p>
+      </section>
+
+
+      <footer>
+        <p>© 2025 Rehan Ganapathy. This document is self‑contained HTML. Math rendered with MathJax. Code blocks are
+          Python examples; some require large pretrained models that must be downloaded separately.</p>
+      </footer>
+    </main>
+  </div>
+</body>
+
+</html>
