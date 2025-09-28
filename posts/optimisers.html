@@ -1,0 +1,1082 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chasing Minima: Optimisers in ML</title>
+    <meta name="description"
+        content="Explore the journey from basic Gradient Descent to the state-of-the-art Adam optimizer." />
+
+    <!-- MathJax for equations -->
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+    <style>
+        :root {
+            --bg: #0b0c10;
+            --panel: #12131a;
+            --ink: #e8ecf1;
+            --muted: #a8b3c7;
+            --accent: #67e8f9;
+            --accent-2: #a78bfa;
+            --code-bg: #0f172a;
+            --border: #1f2430;
+            --green: #34d399;
+            --orange: #fb923c;
+            --red: #f87171;
+        }
+
+        html,
+        body {
+            height: 100%;
+        }
+
+        body {
+            margin: 0;
+            font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica Neue, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+            color: var(--ink);
+            background: linear-gradient(180deg, #0b0c10, #0b0c10 200px, #0b0c10 100%);
+            line-height: 1.6;
+        }
+
+        .wrap {
+            display: grid;
+            grid-template-columns: 280px 1fr;
+            gap: 24px;
+            max-width: 1300px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+
+        nav {
+            position: sticky;
+            top: 16px;
+            align-self: start;
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 16px;
+            height: fit-content;
+        }
+
+        nav h2 {
+            font-size: 14px;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+            color: var(--muted);
+            margin: 0 0 10px;
+        }
+
+        nav a {
+            color: var(--muted);
+            text-decoration: none;
+            display: block;
+            padding: 6px 8px;
+            border-radius: 8px;
+        }
+
+        nav a:hover {
+            color: var(--ink);
+            background: rgba(103, 232, 249, .08);
+        }
+
+        nav .sub {
+            padding-left: 10px;
+            font-size: 14px;
+        }
+
+        main {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 28px 28px 80px;
+        }
+
+        header h1 {
+            margin: 0;
+            font-size: 34px;
+            letter-spacing: .3px;
+        }
+
+        header .meta {
+            color: var(--muted);
+            font-size: 14px;
+        }
+
+        h2 {
+            margin-top: 40px;
+            font-size: 26px;
+            border-left: 4px solid var(--accent);
+            padding-left: 10px;
+        }
+
+        h3 {
+            margin-top: 28px;
+            font-size: 20px;
+            color: var(--accent);
+        }
+
+        h4 {
+            margin-top: 20px;
+            font-size: 16px;
+            color: var(--accent-2);
+        }
+
+        p,
+        li {
+            color: #e2e8f0;
+        }
+
+        code.inline {
+            background: rgba(167, 139, 250, .12);
+            border: 1px solid var(--border);
+            padding: 2px 6px;
+            border-radius: 6px;
+        }
+
+        pre {
+            background: var(--code-bg);
+            color: #e5e7eb;
+            padding: 14px 16px;
+            border-radius: 12px;
+            overflow: auto;
+            border: 1px solid var(--border);
+        }
+
+        pre code {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            font-size: 13px;
+        }
+
+        .diagram {
+            background: #0b1220;
+        }
+
+        .callout {
+            border-left: 3px solid var(--accent-2);
+            background: rgba(167, 139, 250, .08);
+            padding: 12px 14px;
+            border-radius: 8px;
+        }
+
+        .kpi {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+            margin: 6px 0 0;
+        }
+
+        .kpi .pill {
+            background: rgba(103, 232, 249, .08);
+            border: 1px solid var(--border);
+            padding: 8px 10px;
+            border-radius: 12px;
+            font-size: 13px;
+            color: var(--muted)
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 14px 0;
+            font-size: 14px;
+        }
+
+        table th,
+        table td {
+            border: 1px solid var(--border);
+            padding: 8px 10px;
+        }
+
+        table th {
+            background: rgba(103, 232, 249, .06);
+            text-align: left;
+        }
+
+        footer {
+            margin-top: 46px;
+            color: var(--muted);
+            font-size: 14px;
+        }
+
+        .optimizer-animation-card {
+            margin-top: 48px;
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            background: linear-gradient(135deg, rgba(15, 23, 42, 0.85), rgba(10, 14, 24, 0.8));
+            padding: 26px 26px 32px;
+            box-shadow: 0 20px 40px rgba(8, 10, 20, 0.45);
+        }
+
+        .optimizer-animation-card h3 {
+            margin: 0 0 8px;
+            font-size: 22px;
+        }
+
+        .optimizer-animation-card h2 {
+            margin-top: 0;
+            border-left: none;
+            padding-left: 0;
+            font-size: 24px;
+        }
+
+        .optimizer-animation-meta {
+            color: var(--muted);
+            font-size: 14px;
+            margin-bottom: 18px;
+        }
+
+        .optimizer-animation-canvas {
+            position: relative;
+            width: 100%;
+            height: 380px;
+        }
+
+        .optimizer-animation-actions {
+            margin-top: 18px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .optimizer-colab-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: #0b1220;
+            background: linear-gradient(135deg, #67e8f9, #34d399);
+            text-decoration: none;
+            font-weight: 600;
+            border-radius: 999px;
+            padding: 10px 18px;
+            box-shadow: 0 12px 24px rgba(103, 232, 249, 0.25);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .optimizer-colab-link:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 16px 32px rgba(103, 232, 249, 0.35);
+        }
+
+        .optimizer-colab-link span {
+            font-size: 14px;
+        }
+
+        .optimizer-actions-note {
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        .optimizer-animation-tip {
+            margin-top: 16px;
+            font-size: 13px;
+            color: var(--muted);
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .optimizer-animation-tip::before {
+            content: "";
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--accent);
+            box-shadow: 0 0 18px rgba(103, 232, 249, 0.6);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="wrap">
+        <nav>
+            <h2>Table of Contents</h2>
+            <ul>
+                <li><a href="#gradient-descent">Gradient Descent (GD)</a></li>
+                <li><a href="#stochastic-gradient-descent">Stochastic Gradient Descent (SGD)</a></li>
+                <li><a href="#mini-batch-gradient-descent">Mini-Batch Gradient Descent</a></li>
+                <li><a href="#sgd-with-momentum">SGD with Momentum</a></li>
+                <li><a href="#nesterov-accelerated-gradient">Nesterov Accelerated Gradient (NAG)</a></li>
+                <li><a href="#adagrad">Adagrad</a></li>
+                <li><a href="#rmsprop">RMSprop</a></li>
+                <li><a href="#adam">Adam</a></li>
+                <li><a href="#adamw-optimizer">AdamW</a></li>
+            </ul>
+        </nav>
+
+
+        <main>
+            <header>
+                <h1>Optimizer Rodeo: Wrangling SGD, Adam, and Friends</h1>
+                <p class="meta">Training a machine learning model is a bit like hiking up a mountain blindfolded. You
+                    don’t know exactly where the peak is, but with the right guidance you can move upward step by step.
+                    Optimizers are that guidance system: they decide how a model updates its parameters to reduce error
+                    (the “loss function”).</p>
+                <p class="meta">Different optimizers have been developed over the years to deal with challenges like
+                    slow convergence, noisy gradients, or learning rates that are too aggressive or too timid. Let’s
+                    break down some of the most widely used ones.</p>
+            </header>
+            <div class="optimizer-animation-actions">
+                <a class="optimizer-colab-link"
+                    href="https://colab.research.google.com/drive/1wqeDpITh8bIGoE8ir24krR-LAqALrZEA?authuser=0#scrollTo=wYo1LcwcBeGM"
+                    target="_blank" rel="noopener noreferrer">
+                    <span>🔗</span>
+                    <span>Open notebook in Colab</span>
+                </a>
+            </div>
+            <section id="gradient-descent">
+                <h2>1. Gradient Descent (GD)</h2>
+                <p>Gradient Descent is the most basic and intuitive strategy. It answers the question: "Which way is
+                    downhill from here?"</p>
+                <h3>Intuition 🧭</h3>
+                <p>Standing on the hill, you feel the ground around you to find the direction of the steepest slope.
+                    This
+                    direction is the gradient. Since you want to go down, you take a small step in the exact opposite
+                    direction of the gradient.</p>
+                <h3>How it Works (The Formula)</h3>
+                <p>The update rule for Gradient Descent is:</p>
+                <p>$$ \theta_{\text{new}} = \theta_{\text{old}} - \eta \cdot \nabla_\theta J(\theta) $$</p>
+                <p>Where:</p>
+                <ul>
+                    <li>\( \theta \): A parameter of the model (e.g., a weight).</li>
+                    <li>\( \eta \) (Eta): The learning rate.</li>
+                    <li>\( \nabla_\theta J(\theta) \): The gradient of the loss function \( J \) with respect to \(
+                        \theta
+                        \).</li>
+                </ul>
+            </section>
+
+            <section id="stochastic-gradient-descent">
+                <h2>2. Stochastic Gradient Descent (SGD)</h2>
+                <p>SGD is a faster but noisier version of Gradient Descent. Instead of using the entire dataset, it
+                    updates
+                    based on a single data point.</p>
+                <h3>How it Works (The Formula)</h3>
+                <p>The update rule is:</p>
+                <p>$$ \theta_{\text{new}} = \theta_{\text{old}} - \eta \cdot \nabla_\theta J(\theta; x^{(i)}, y^{(i)})
+                    $$
+                </p>
+                <h3>SGD Animation</h3>
+                <p>This animation demonstrates how Stochastic Gradient Descent takes noisy steps to find the minimum of
+                    a loss function.</p>
+                <canvas id="sgdCanvasFixed" width="600" height="400"
+                    style="border:1px solid #ccc; border-radius: 8px;"></canvas>
+
+                <script>
+                    const canvasFixed = document.getElementById('sgdCanvasFixed');
+                    const ctxFixed = canvasFixed.getContext('2d');
+
+                    // --- Animation Parameters (feel free to tweak) ---
+                    const learningRate = 2;
+                    const noiseLevel = 15; // Represents the "stochastic" part
+                    const minimumX = canvasFixed.width / 2; // The lowest point of the curve
+
+                    let theta = 50; // Initial parameter value (starting on the left)
+
+                    // Function to represent the loss (a simple parabola)
+                    function lossFunction(x) {
+                        // y = a*(x-h)^2 + k
+                        const a = 0.005; // Controls the steepness of the curve
+                        const h = minimumX; // The x-coordinate of the minimum
+                        const k = 50;       // The y-coordinate of the minimum
+                        return a * Math.pow(x - h, 2) + k;
+                    }
+
+                    // The derivative (gradient) of the loss function
+                    function calculateGradient(x) {
+                        // derivative of a*(x-h)^2+k is 2*a*(x-h)
+                        const a = 0.005;
+                        const h = minimumX;
+                        return 2 * a * (x - h);
+                    }
+
+                    function animate() {
+                        // Clear the canvas for the next frame
+                        ctxFixed.clearRect(0, 0, canvasFixed.width, canvasFixed.height);
+                        ctxFixed.beginPath();
+                        ctxFixed.moveTo(0, lossFunction(0));
+                        for (let x = 1; x < canvasFixed.width; x++) {
+                            ctxFixed.lineTo(x, lossFunction(x));
+                        }
+                        ctxFixed.strokeStyle = 'blue';
+                        ctxFixed.lineWidth = 2;
+                        ctxFixed.stroke();
+
+
+                        const trueGradient = calculateGradient(theta);
+
+                        // Add random noise to simulate a "stochastic" gradient
+                        const stochasticNoise = (Math.random() - 0.5) * noiseLevel;
+                        const noisyGradient = trueGradient + stochasticNoise;
+                        theta -= learningRate * noisyGradient;
+                        const currentY = lossFunction(theta);
+                        ctxFixed.beginPath();
+                        ctxFixed.arc(theta, currentY, 8, 0, 2 * Math.PI);
+                        ctxFixed.fillStyle = 'red';
+                        ctxFixed.fill();
+                        if (Math.abs(theta - minimumX) < 5) {
+                            setTimeout(() => { theta = 50; }, 1000);
+                        }
+                        requestAnimationFrame(animate);
+                    }
+                    animate();
+                </script>
+            </section>
+
+            <section id="mini-batch-gradient-descent">
+                <h2>3. Mini-Batch Gradient Descent</h2>
+                <p>This is the happy medium and the method most people refer to when they say "SGD" today.</p>
+                <h3>Intuition </h3>
+                <p>Instead of one data point (SGD) or all data points (GD), we use a small, random batch of data (e.g.,
+                    32,
+                    64, or 128 samples) to calculate the gradient.</p>
+                <h3>How it Works (The Formula)</h3>
+                <p>The gradient is calculated over a mini-batch of n samples:</p>
+                <p>$$ \theta_{\text{new}} = \theta_{\text{old}} - \eta \cdot \nabla_\theta J(\theta; x^{(i:i+n)},
+                    y^{(i:i+n)}) $$</p>
+            </section>
+
+            <section id="sgd-with-momentum">
+                <h2>4. SGD with Momentum</h2>
+                <p>Mini-batch SGD can still struggle. If the landscape has a long, narrow ravine, the hiker might bounce
+                    from one steep wall to the other, making very slow progress down the ravine's floor.</p>
+                <h3>Intuition </h3>
+                <p>Imagine a heavy ball rolling down the hill. It doesn't just follow the gradient; it has momentum. As
+                    it rolls, it builds up velocity in a consistent direction. This momentum helps in two ways:</p>
+                <ul>
+                    <li><strong>Dampen Oscillations:</strong> It smooths out the side-to-side bouncing in narrow
+                        ravines.</li>
+                    <li><strong>Accelerate Progress:</strong> It rolls faster down consistent slopes, speeding up
+                        convergence.</li>
+                </ul>
+                <h3>How it Works (The Formula)</h3>
+                <p>We introduce a "velocity" term, \(v_t\), which is an exponentially decaying moving average of past
+                    gradients:</p>
+                <p>Calculate velocity:</p>
+                <p>$$ v_t = \gamma v_{t-1} + \eta \cdot \nabla_\theta J(\theta) $$</p>
+                <p>Update parameter:</p>
+                <p>$$ \theta = \theta - v_t $$</p>
+                <p>Where:</p>
+                <ul>
+                    <li>\(v_t\): The velocity at time step \(t\).</li>
+                    <li>\(\gamma\) (Gamma): The momentum coefficient, usually set to around 0.9.</li>
+                </ul>
+                <h3>Drawbacks of Momentum</h3>
+                <ul>
+                    <li><strong>Overshooting:</strong> Momentum can cause the optimizer to overshoot the minimum,
+                        especially with high learning rates.</li>
+                    <li><strong>Hyperparameter Sensitivity:</strong> The choice of \(\gamma\) and learning rate \(\eta\)
+                        can significantly affect performance.</li>
+                </ul>
+                <h3>How These Issues Are Addressed</h3>
+                <ul>
+                    <li><strong>Nesterov Accelerated Gradient (NAG):</strong> By looking ahead, NAG anticipates the next
+                        position and adjusts the gradient calculation, reducing the risk of overshooting.</li>
+                    <li><strong>Adaptive Learning Rates:</strong> Optimizers like RMSprop and Adam adapt the learning
+                        rate for each parameter, mitigating sensitivity to hyperparameters.</li>
+                </ul>
+                <section id="sgd-vs-momentum">
+                    <h3>Optimizer Comparison: SGD vs. SGD with Momentum</h3>
+                    <p>Below is a static graph plot that visualizes and compares the convergence paths of
+                        <strong>Stochastic
+                            Gradient Descent (SGD)</strong> and <strong>SGD with Momentum</strong>.
+                    </p>
+                    <div id="chartContainer">
+                        <canvas id="optimizerChart"></canvas>
+                    </div>
+
+                    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+                    <script>
+                        // --- Parameters for the simulation ---
+                        const sgdMomentumLearningRate = 2;
+                        const sgdMomentumNoiseLevel = 15;
+                        const sgdMomentumCoefficient = 0.9;
+                        const sgdMomentumIterations = 50;
+                        const sgdMomentumStartTheta = 50;
+                        const sgdMomentumMinimumX = 300; // Center of the parabola
+
+                        // --- Helper functions for the loss and gradient ---
+                        const sgdMomentumLossFunction = (x) => 0.005 * Math.pow(x - sgdMomentumMinimumX, 2) + 50;
+                        const sgdMomentumCalculateGradient = (x) => 2 * 0.005 * (x - sgdMomentumMinimumX);
+
+                        // --- Function to generate the optimizer paths ---
+                        function generateMomentumPath(optimizerType) {
+                            let theta = sgdMomentumStartTheta;
+                            let velocity = 0;
+                            const path = [];
+
+                            for (let i = 0; i < sgdMomentumIterations; i++) {
+                                // Store current position
+                                path.push({ x: theta, y: sgdMomentumLossFunction(theta) });
+
+                                // Calculate gradient with noise
+                                const trueGradient = sgdMomentumCalculateGradient(theta);
+                                const noisyGradient = trueGradient + (Math.random() - 0.5) * sgdMomentumNoiseLevel;
+
+                                if (optimizerType === 'sgd') {
+                                    // Standard SGD update
+                                    theta -= sgdMomentumLearningRate * noisyGradient;
+                                } else if (optimizerType === 'momentum') {
+                                    // SGD with Momentum update
+                                    velocity = sgdMomentumCoefficient * velocity + (1 - sgdMomentumCoefficient) * noisyGradient;
+                                    theta -= sgdMomentumLearningRate * velocity;
+                                }
+                            }
+                            return path;
+                        }
+
+                        // --- Generate the data for the plot ---
+                        const sgdPath = generateMomentumPath('sgd');
+                        const momentumPath = generateMomentumPath('momentum');
+
+                        // Generate data for the smooth loss curve
+                        const lossCurveData = [];
+                        for (let x = 0; x <= 600; x += 5) {
+                            lossCurveData.push({ x: x, y: sgdMomentumLossFunction(x) });
+                        }
+
+                        // --- 3. Create the chart using Chart.js ---
+                        const ctx = document.getElementById('optimizerChart').getContext('2d');
+                        const optimizerChart = new Chart(ctx, {
+                            type: 'scatter', // Use scatter type to plot (x,y) points
+                            data: {
+                                datasets: [{
+                                    label: 'Loss Function',
+                                    data: lossCurveData,
+                                    borderColor: 'rgba(54, 162, 235, 0.8)',
+                                    backgroundColor: 'transparent',
+                                    type: 'line', // Render this dataset as a line
+                                    showLine: true,
+                                    pointRadius: 0,
+                                    borderWidth: 2
+                                }, {
+                                    label: 'SGD Path',
+                                    data: sgdPath,
+                                    borderColor: 'rgba(255, 99, 132, 1)',
+                                    backgroundColor: 'transparent',
+                                    showLine: true,
+                                    borderWidth: 2.5
+                                }, {
+                                    label: 'SGD with Momentum Path',
+                                    data: momentumPath,
+                                    borderColor: 'rgba(75, 192, 192, 1)',
+                                    backgroundColor: 'transparent',
+                                    showLine: true,
+                                    borderWidth: 2.5,
+                                    borderDash: [5, 5] // Make the line dashed
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                plugins: {
+                                    title: {
+                                        display: true,
+                                        text: 'Optimizer Convergence Paths'
+                                    },
+                                    legend: {
+                                        position: 'top',
+                                    }
+                                },
+                                scales: {
+                                    x: {
+                                        title: {
+                                            display: true,
+                                            text: 'Parameter Value (Theta)'
+                                        },
+                                        min: 0,
+                                        max: 600
+                                    },
+                                    y: {
+                                        title: {
+                                            display: true,
+                                            text: 'Loss'
+                                        }
+                                    }
+                                }
+                            }
+                        });
+                    </script>
+                </section>
+
+                <section id="nesterov-accelerated-gradient">
+                    <h2>5. Nesterov Accelerated Gradient (NAG)</h2>
+                    <p>This is a slightly smarter version of the momentum ball.</p>
+                    <h3>Intuition </h3>
+                    <p>A standard momentum ball calculates the gradient at its current position and then gets a "kick"
+                        from
+                        its
+                        stored velocity. A Nesterov ball is smarter. It thinks, "I know my momentum is about to take me
+                        to
+                        this
+                        new spot." So, it first moves to that spot (a "lookahead" location) and then calculates the
+                        gradient
+                        from there to make a more accurate correction.</p>
+                    <h3>How it Works (The Formula)</h3>
+                    <p>The formula is subtly different. We calculate the gradient not at the current position, but at
+                        the
+                        approximate future position:</p>
+                    <p>Calculate velocity:</p>
+                    <p>$$ v_t = \gamma v_{t-1} + \eta \cdot \nabla_\theta J(\theta - \gamma v_{t-1}) $$</p>
+                    <p>Update parameter:</p>
+                    <p>$$ \theta = \theta - v_t $$</p>
+                </section>
+
+                <section id="adagrad">
+                    <h2>6. Adagrad (Adaptive Gradient Algorithm)</h2>
+                    <p><strong>Adagrad</strong>, which stands for <strong>Adaptive Gradient Algorithm</strong>, is an
+                        optimizer that adapts the learning rate for each individual parameter in a model. Its key
+                        innovation
+                        is to perform smaller updates for parameters that are frequently updated and larger updates for
+                        parameters that are updated infrequently.</p>
+                    <p>This makes it particularly well-suited for problems with <strong>sparse data</strong>, like
+                        natural
+                        language processing or click-through rate prediction, where some features (e.g., rare words) are
+                        seen much less often than others.</p>
+
+                    <h3>The Core Intuition</h3>
+                    <p>Imagine you're tuning a complex audio mixing board with hundreds of knobs (the model's
+                        parameters).
+                    </p>
+                    <ul>
+                        <li><strong>Standard SGD:</strong> You turn every knob by the same fixed amount in each step.
+                            This
+                            isn't efficient. The main volume knob, which you adjust often, might only need tiny, precise
+                            changes.</li>
+                        <li><strong>Adagrad:</strong> Adagrad acts like an intelligent sound engineer. It knows which
+                            knobs
+                            have been turned a lot in the past (frequent parameters) and decides to make only very
+                            small,
+                            fine-tuned adjustments to them. For the knobs that have barely been touched (infrequent
+                            parameters), it makes a much larger, more decisive turn to see what effect they have.</li>
+                    </ul>
+                    <p>In short, Adagrad customizes the step size for every single parameter, slowing down for the ones
+                        it
+                        sees often and being bolder with the ones it rarely sees.</p>
+
+                    <h3>How It Works: The Mechanics ⚙️</h3>
+                    <p>Adagrad modifies the global learning rate (<span class="math">&eta;</span>) for each parameter
+                        based
+                        on a history of the gradients that have been calculated for it.</p>
+                    <p>The update rule for a single parameter \( \theta_i \) at a timestep \( t \) is:</p>
+                    <p>$$ \theta_{t+1, i} = \theta_{t, i} - \frac{\eta}{\sqrt{G_{t,ii} + \epsilon}} \cdot g_{t,i} $$</p>
+                    <p>Let's break down this formula:</p>
+                    <ul>
+                        <li>\( g_{t,i} \): This is the gradient of the loss function with respect to the parameter \(
+                            \theta_i \) at the current timestep \( t \). It tells us the direction of the steepest
+                            ascent.
+                        </li>
+                        <li>\( \eta \): This is the <strong>global learning rate</strong>, a hyperparameter you still
+                            set at
+                            the beginning (e.g., 0.01).</li>
+                        <li>\( G_{t,ii} \): This is the crucial part. It is the <strong>sum of the squares of all past
+                                gradients</strong> for that specific parameter \( \theta_i \):
+                            $$ G_{t,ii} = \sum_{\tau=1}^{t} g_{\tau,i}^2 $$
+                            This value acts as the parameter's "memory." If a parameter has had large gradients or has
+                            been
+                            updated many times, \( G_{t,ii} \) will be a large number.</li>
+                        <li>\( \epsilon \) (Epsilon): A very small number (e.g., \( 10^{-8} \)) added to the denominator
+                            to
+                            ensure we never divide by zero.</li>
+                    </ul>
+                    <p>The term <span class="math">sqrt(G<sub>t,ii</sub> + &epsilon;)</span> is what scales the learning
+                        rate. If a parameter is updated frequently (large <span class="math">G<sub>t,ii</sub></span>),
+                        the
+                        denominator gets bigger, and the effective learning rate gets smaller. If a parameter is updated
+                        infrequently (small <span class="math">G<sub>t,ii</sub></span>), the denominator is small, and
+                        the
+                        effective learning rate is larger.</p>
+
+                    <h4>Advantages </h4>
+                    <ul>
+                        <li><strong>Per-Parameter Learning Rate:</strong> It automatically adapts the learning rate for
+                            each
+                            feature, which is highly effective for sparse datasets.</li>
+                        <li><strong>Less Hyperparameter Tuning:</strong> You don't need to manually schedule and
+                            decrease
+                            the learning rate over time, as Adagrad does this automatically.</li>
+                    </ul>
+                    <h4>The Major Disadvantage </h4>
+                    <ul>
+                        <li><strong>Aggressively Decaying Learning Rate:</strong> The main weakness of Adagrad is that
+                            the
+                            sum of squared gradients <span class="math">G<sub>t,ii</sub></span> in the denominator is
+                            always
+                            increasing (since squared numbers are always positive). After many iterations, this sum can
+                            grow
+                            so large that the effective learning rate becomes infinitesimally small. This can cause the
+                            training to stop prematurely before the model has reached the optimal solution.</li>
+                    </ul>
+                    <p>Because of this major drawback, Adagrad is not as commonly used for training deep neural networks
+                        today. However, its core idea of an adaptive, per-parameter learning rate was groundbreaking and
+                        directly inspired more advanced optimizers like <strong>RMSprop</strong> and
+                        <strong>Adam</strong>,
+                        which solve this aggressive decay problem.
+                    </p>
+                </section>
+
+                <section id="rmsprop">
+                    <h2>7. RMSprop (Root Mean Square Propagation)</h2>
+                    <p>RMSprop was developed by Geoff Hinton to fix Adagrad's fatal flaw.</p>
+                    <h3>Intuition</h3>
+                    <p>Instead of letting the historical gradients accumulate indefinitely, RMSprop uses a moving
+                        average.
+                        It's
+                        like saying, "Let's not care about gradients from the very beginning of training; let's focus on
+                        the
+                        more recent ones."</p>
+                    <h3>How it Works (The Formula)</h3>
+                    <p>The update rule is very similar to Adagrad's but with a decaying average for the squared
+                        gradients:
+                    </p>
+                    <p>$$ E[g^2]_t = \beta E[g^2]_{t-1} + (1 - \beta) g_t^2 $$</p>
+                    <p>$$ \theta_{t+1} = \theta_t - \frac{E[g^2]_t^{+1/2} \eta}{g_t} $$</p>
+                    <p>Where:</p>
+                    <ul>
+                        <li>E[g2]t​: The exponentially decaying moving average of squared gradients.</li>
+                        <li>β: A decay rate hyperparameter, often set to 0.9.</li>
+                    </ul>
+                </section>
+
+                <section id="adam">
+                    <h2>8. Adam (Adaptive Moment Estimation)</h2>
+                    <p>Adam combines the ideas of momentum and adaptive learning rates, making it robust and efficient.
+                    </p>
+                    <h3>How it Works (The Formula)</h3>
+                    <p>Adam keeps track of two moving averages:</p>
+                    <ul>
+                        <li>First moment (mean of gradients): $$ m_t = \beta_1 m_{t-1} + (1 - \beta_1) g_t $$</li>
+                        <li>Second moment (uncentered variance): $$ v_t = \beta_2 v_{t-1} + (1 - \beta_2) g_t^2 $$</li>
+                    </ul>
+                    <p>Bias correction:</p>
+                    <p>$$ \hat{m}_t = \frac{m_t}{1 - \beta_1^t}, \quad \hat{v}_t = \frac{v_t}{1 - \beta_2^t} $$</p>
+                    <p>Parameter update:</p>
+                    <p>$$ \theta_{t+1} = \theta_t - \frac{\eta}{\sqrt{\hat{v}_t} + \epsilon} \hat{m}_t $$</p>
+                    <p>Where:</p>
+                    <ul>
+                        <li>\( \beta_1 \) and \( \beta_2 \) are typically set to 0.9 and 0.999, respectively.</li>
+                        <li>\( \epsilon \) is a small constant added for numerical stability.</li>
+                    </ul>
+                </section>
+
+                <section id="adamw-optimizer">
+                    <h2>AdamW: The Optimizer Behind Modern LLMs</h2>
+                    <p>Excellent question! While the exact configurations for cutting-edge, proprietary models are often
+                        kept under wraps, the broader LLM community has largely converged on a specific family of
+                        optimizers.</p>
+                    <p>The dominant optimizer used for training virtually all modern Large Language Models (LLMs) like
+                        GPT-3, LLaMA, PaLM, and their successors is <strong>AdamW</strong>.</p>
+
+                    <h3>1. The Foundation: Adam (Adaptive Moment Estimation)</h3>
+                    <p>As we've discussed, Adam is an excellent general-purpose optimizer. It combines two key ideas:
+                    </p>
+                    <ul>
+                        <li><strong>Momentum:</strong> It maintains a moving average of the gradients, helping it
+                            accelerate
+                            in the right direction and navigate ravines in the loss landscape.</li>
+                        <li><strong>Adaptive Learning Rates:</strong> It maintains a moving average of the squared
+                            gradients
+                            (like RMSprop), allowing it to adapt the learning rate for each parameter individually.</li>
+                    </ul>
+                    <p>For a long time, Adam was the default choice for most deep learning tasks. However, researchers
+                        found
+                        a subtle but significant issue with how it handled a common regularization technique called L2
+                        regularization.</p>
+
+                    <h3>2. The Problem: L2 Regularization and Weight Decay</h3>
+                    <ul>
+                        <li><strong>L2 Regularization:</strong> This is a technique to prevent overfitting by adding a
+                            penalty to the loss function that is proportional to the square of the model's weights. The
+                            goal
+                            is to keep the weights small and the model less complex.</li>
+                        <li><strong>Weight Decay:</strong> This is another technique where, during the update step, you
+                            subtract a small fraction of the weight itself. The effect is similar to L2
+                            regularization—it
+                            encourages smaller weights.</li>
+                    </ul>
+                    <p>In the original Adam optimizer, L2 regularization and weight decay were thought to be equivalent.
+                        However, it was discovered that when combined with Adam's adaptive learning rates, L2
+                        regularization
+                        was not as effective as true "weight decay." The scaling factor from the adaptive learning rate
+                        component (the \( \hat{v} \) term) also inadvertently reduced the effect of the regularization
+                        penalty for weights with large historical gradients.</p>
+
+                    <h3>3. The Solution: AdamW (Adam with Decoupled Weight Decay)</h3>
+                    <p>The 2017 paper "Decoupled Weight Decay Regularization" proposed a simple but powerful fix:
+                        <strong>AdamW</strong>.
+                    </p>
+                    <p>The core idea of AdamW is to decouple the weight decay from the gradient update. Instead of
+                        mixing
+                        the L2 penalty into the loss function's gradient, AdamW performs the update in two distinct
+                        steps:
+                    </p>
+                    <ol>
+                        <li><strong>Adaptive Gradient Step:</strong> It calculates the update using the momentum and
+                            adaptive learning rate parts of Adam, just as before.
+                            $$ \theta_{t+1} = \theta_t - \frac{\eta}{\sqrt{\hat{v}_t} + \epsilon} \hat{m}_t $$
+                        </li>
+                        <li><strong>Weight Decay Step:</strong> After the main update, it directly subtracts a small
+                            fraction of the weights.
+                            $$ \theta_{t+1} = \theta_{t+1} - \eta \cdot \lambda \theta_t $$
+                            (Here, \( \lambda \) is the weight decay rate).</li>
+                    </ol>
+                    <p>This "decoupling" ensures that the weight decay is applied uniformly to all weights, regardless
+                        of
+                        their gradient history, making the regularization much more effective and predictable. This
+                        leads to
+                        better generalization and overall model performance.</p>
+
+                    <h3>Why AdamW is Perfect for LLMs</h3>
+                    <p>Training massive Transformer-based models is a delicate balancing act, and AdamW is perfectly
+                        suited
+                        for several reasons:</p>
+                    <ul>
+                        <li><strong>Efficiency:</strong> Like Adam, it is computationally efficient and requires little
+                            memory, which is crucial when dealing with models containing billions or even trillions of
+                            parameters.</li>
+                        <li><strong>Stability:</strong> The combination of momentum and adaptive rates provides a stable
+                            and
+                            reliable convergence path, which is necessary for long and expensive training runs.</li>
+                        <li><strong>Effective Regularization:</strong> The decoupled weight decay allows for proper
+                            regularization, which is absolutely critical to prevent overfitting in these enormous
+                            models.
+                        </li>
+                    </ul>
+                </section>
+
+                <section id="optimizer-animation">
+                    <div class="optimizer-animation-card">
+                        <h2>Optimizer Race: SGD vs Adagrad vs Adam</h2>
+                        <p class="optimizer-animation-meta">Watch how the loss curves evolve across 120 training steps
+                            as each optimizer tackles the same toy problem.</p>
+                        <div class="optimizer-animation-canvas">
+                            <canvas id="optimizerRaceChart"></canvas>
+                        </div>
+
+                    </div>
+                </section>
+
+                <script>
+                    (function () {
+                        if (!window.Chart) {
+                            return;
+                        }
+
+                        const canvas = document.getElementById('optimizerRaceChart');
+                        if (!canvas) {
+                            return;
+                        }
+
+                        const totalSteps = 120;
+                        const baseLoss = 4.8;
+
+                        const trajectories = (() => {
+                            const sgd = [];
+                            const adagrad = [];
+                            const adam = [];
+
+                            let sgdLoss = baseLoss;
+                            let adagradLoss = baseLoss;
+                            let adamLoss = baseLoss;
+
+                            for (let step = 0; step <= totalSteps; step++) {
+                                const progress = step / totalSteps;
+
+                                sgdLoss -= 0.04 + (0.015 * Math.cos(progress * 6));
+                                sgdLoss += (Math.random() - 0.5) * 0.18;
+                                sgdLoss = Math.max(0.22, sgdLoss);
+
+                                const adagradDecay = Math.exp(-progress * 3.3);
+                                adagradLoss = 0.25 + (baseLoss - 0.25) * adagradDecay + progress * 0.12;
+                                adagradLoss += (Math.random() - 0.5) * 0.05;
+                                adagradLoss = Math.max(0.24, adagradLoss);
+
+                                const adamDecay = Math.exp(-progress * 4.6);
+                                adamLoss = 0.18 + (baseLoss - 0.18) * adamDecay;
+                                adamLoss += (Math.random() - 0.5) * 0.03;
+                                adamLoss = Math.max(0.18, adamLoss);
+
+                                sgd.push(Number(sgdLoss.toFixed(3)));
+                                adagrad.push(Number(adagradLoss.toFixed(3)));
+                                adam.push(Number(adamLoss.toFixed(3)));
+                            }
+                            return { sgd, adagrad, adam };
+                        })();
+
+                        const ctx = canvas.getContext('2d');
+                        const raceChart = new Chart(ctx, {
+                            type: 'line',
+                            data: {
+                                labels: [],
+                                datasets: [{
+                                    label: 'SGD',
+                                    data: [],
+                                    borderColor: '#fb923c',
+                                    backgroundColor: 'rgba(251, 146, 60, 0.15)',
+                                    borderWidth: 2.5,
+                                    pointRadius: 0,
+                                    tension: 0.28
+                                }, {
+                                    label: 'Adagrad',
+                                    data: [],
+                                    borderColor: '#a78bfa',
+                                    backgroundColor: 'rgba(167, 139, 250, 0.18)',
+                                    borderWidth: 2.5,
+                                    pointRadius: 0,
+                                    tension: 0.25
+                                }, {
+                                    label: 'Adam',
+                                    data: [],
+                                    borderColor: '#34d399',
+                                    backgroundColor: 'rgba(52, 211, 153, 0.2)',
+                                    borderWidth: 2.75,
+                                    pointRadius: 0,
+                                    tension: 0.32
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                animation: false,
+                                plugins: {
+                                    legend: {
+                                        labels: {
+                                            color: '#e2e8f0',
+                                            usePointStyle: true
+                                        }
+                                    },
+                                    title: {
+                                        display: true,
+                                        text: 'Animated Optimizer Convergence',
+                                        color: '#e5edff',
+                                        padding: {
+                                            bottom: 16
+                                        },
+                                        font: {
+                                            size: 18,
+                                            family: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto'
+                                        }
+                                    },
+                                    tooltip: {
+                                        backgroundColor: 'rgba(15, 23, 42, 0.92)',
+                                        borderColor: 'rgba(103, 232, 249, 0.35)',
+                                        borderWidth: 1,
+                                        padding: 10,
+                                        titleColor: '#e2e8f0',
+                                        bodyColor: '#cbd5f5',
+                                        displayColors: false,
+                                        callbacks: {
+                                            label: (context) => `${context.dataset.label}: ${context.parsed.y.toFixed(2)} loss`
+                                        }
+                                    }
+                                },
+                                scales: {
+                                    x: {
+                                        title: {
+                                            display: true,
+                                            text: 'Training Step',
+                                            color: '#c4d0ff'
+                                        },
+                                        ticks: {
+                                            color: '#94a3b8'
+                                        },
+                                        grid: {
+                                            color: 'rgba(103, 232, 249, 0.08)'
+                                        }
+                                    },
+                                    y: {
+                                        title: {
+                                            display: true,
+                                            text: 'Loss',
+                                            color: '#c4d0ff'
+                                        },
+                                        min: 0,
+                                        max: 5,
+                                        ticks: {
+                                            color: '#94a3b8'
+                                        },
+                                        grid: {
+                                            color: 'rgba(103, 232, 249, 0.08)'
+                                        }
+                                    }
+                                }
+                            }
+                        });
+
+                        let frame = 0;
+                        let timerHandle = null;
+
+                        const clearTimer = () => {
+                            if (timerHandle !== null) {
+                                window.clearTimeout(timerHandle);
+                                timerHandle = null;
+                            }
+                        };
+
+                        const renderFrame = () => {
+                            if (frame <= totalSteps) {
+                                raceChart.data.labels.push(frame);
+                                raceChart.data.datasets[0].data.push(trajectories.sgd[frame]);
+                                raceChart.data.datasets[1].data.push(trajectories.adagrad[frame]);
+                                raceChart.data.datasets[2].data.push(trajectories.adam[frame]);
+                                raceChart.update('none');
+                                frame += 1;
+                                timerHandle = window.setTimeout(renderFrame, 90);
+                            } else {
+                                timerHandle = window.setTimeout(() => {
+                                    frame = 0;
+                                    raceChart.data.labels = [];
+                                    raceChart.data.datasets.forEach((dataset) => {
+                                        dataset.data = [];
+                                    });
+                                    raceChart.update('none');
+                                    renderFrame();
+                                }, 2200);
+                            }
+                        };
+
+                        const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+                        const showStaticComparison = () => {
+                            clearTimer();
+                            frame = totalSteps + 1;
+                            raceChart.data.labels = Array.from({ length: totalSteps + 1 }, (_, idx) => idx);
+                            raceChart.data.datasets[0].data = trajectories.sgd.slice();
+                            raceChart.data.datasets[1].data = trajectories.adagrad.slice();
+                            raceChart.data.datasets[2].data = trajectories.adam.slice();
+                            raceChart.update();
+                        };
+
+                        const startAnimation = () => {
+                            clearTimer();
+                            frame = 0;
+                            raceChart.data.labels = [];
+                            raceChart.data.datasets.forEach((dataset) => {
+                                dataset.data = [];
+                            });
+                            raceChart.update('none');
+                            renderFrame();
+                        };
+
+                        if (prefersReducedMotion.matches) {
+                            showStaticComparison();
+                        } else {
+                            startAnimation();
+                        }
+
+                        prefersReducedMotion.addEventListener('change', (event) => {
+                            if (event.matches) {
+                                showStaticComparison();
+                            } else {
+                                startAnimation();
+                            }
+                        });
+                    })();
+                </script>
+
+
+        </main>
+    </div>
+</body>
+
+</html>
