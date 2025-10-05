@@ -1,0 +1,691 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Asynchronous Programming in Node.js</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6;
+            color: #e4e4e7;
+            background: #09090b;
+            padding: 2rem 1rem;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+            color: #fafafa;
+        }
+
+        h2 {
+            font-size: 1.75rem;
+            margin: 3rem 0 1rem;
+            color: #fafafa;
+            border-bottom: 2px solid #27272a;
+            padding-bottom: 0.5rem;
+        }
+
+        h3 {
+            font-size: 1.25rem;
+            margin: 2rem 0 1rem;
+            color: #fafafa;
+        }
+
+        p {
+            margin-bottom: 1rem;
+            color: #d4d4d8;
+        }
+
+        code {
+            background: #18181b;
+            padding: 0.2rem 0.4rem;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            color: #a1a1aa;
+        }
+
+        pre {
+            background: #18181b;
+            padding: 1.5rem;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 1.5rem 0;
+            border: 1px solid #27272a;
+        }
+
+        pre code {
+            background: none;
+            padding: 0;
+            color: #e4e4e7;
+        }
+
+        ul,
+        ol {
+            margin: 1rem 0 1rem 2rem;
+        }
+
+        li {
+            margin: 0.5rem 0;
+        }
+
+        .animation-space {
+            background: #18181b;
+            border: 2px dashed #27272a;
+            border-radius: 8px;
+            padding: 3rem;
+            margin: 2rem 0;
+            text-align: center;
+            color: #71717a;
+            min-height: 200px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .note {
+            background: #1e293b;
+            border-left: 4px solid #3b82f6;
+            padding: 1rem;
+            margin: 1.5rem 0;
+            border-radius: 4px;
+        }
+
+        .warning {
+            background: #451a03;
+            border-left: 4px solid #f59e0b;
+            padding: 1rem;
+            margin: 1.5rem 0;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Asynchronous Programming in JavaScript(Node.js)</h1>
+
+        <p>
+            A couple of years ago, i was interviewing for a backend developer intern role and i remember going blank
+            when
+            asked about the event loop and async patterns in Node.js. Since then, I've made it a point to try and
+            understand concepts before implementing them, here is are a few examples of how asynchronous programming
+            works in Node.js.
+
+        </p>
+
+        <h2>1. The Event Loop</h2>
+
+        <p>Node.js uses a single-threaded event loop built on libuv. This architecture allows it to handle many
+            concurrent operations without creating multiple threads. The event loop processes callbacks in specific
+            phases, and understanding these phases is crucial for predicting when your code executes.</p>
+
+        <h3>Event Loop Phases</h3>
+
+        <p>The event loop cycles through six phases in order:</p>
+
+        <ol>
+            <li><strong>Timers</strong> – Executes callbacks scheduled by <code>setTimeout()</code> and
+                <code>setInterval()</code>
+            </li>
+            <li><strong>Pending callbacks</strong> – Executes I/O callbacks deferred from the previous cycle</li>
+            <li><strong>Idle, prepare</strong> – Internal use only</li>
+            <li><strong>Poll</strong> – Retrieves new I/O events and executes I/O callbacks</li>
+            <li><strong>Check</strong> – Executes <code>setImmediate()</code> callbacks</li>
+            <li><strong>Close callbacks</strong> – Executes close event callbacks (e.g.,
+                <code>socket.on('close')</code>)
+            </li>
+        </ol>
+
+        <div class="animation-space">
+            <img src="https://miro.medium.com/v2/resize:fit:1400/1*GJg4KwB-_vEyTKQXF2Zs7Q.gif" alt="Event Loop Phases"
+                style="max-width: 100%; border-radius: 8px;">
+        </div>
+
+        <h3>Microtasks vs Macrotasks</h3>
+
+        <p>Between each phase, Node.js processes the microtask queue. Microtasks include:</p>
+        <ul>
+            <li><code>process.nextTick()</code> callbacks (processed first)</li>
+            <li>Promise callbacks (<code>.then()</code>, <code>.catch()</code>, <code>.finally()</code>)</li>
+            <li><code>queueMicrotask()</code> callbacks</li>
+        </ul>
+
+        <p>Macrotasks are the callbacks in the event loop phases (timers, I/O, etc.). The key rule: <strong>all
+                microtasks are processed before moving to the next macrotask</strong>.</p>
+
+        <pre><code>console.log('1: sync');
+
+setTimeout(() => console.log('5: timer'), 0);
+
+Promise.resolve().then(() => console.log('3: promise'));
+
+process.nextTick(() => console.log('2: nextTick'));
+
+console.log('4: sync');
+
+// Output:
+// 1: sync
+// 4: sync
+// 2: nextTick
+// 3: promise
+// 5: timer</code></pre>
+
+        <div class="warning">
+            <strong>Microtask Starvation:</strong> If you recursively add microtasks, the event loop can never move to
+            the next phase. This blocks all I/O operations.
+        </div>
+
+        <h3>setImmediate() vs setTimeout()</h3>
+
+        <p>The order of execution between <code>setImmediate()</code> and <code>setTimeout(fn, 0)</code> is
+            non-deterministic when called from the main module, because it depends on process performance. However, when
+            called from within an I/O cycle, <code>setImmediate()</code> always executes first because it runs in the
+            check phase, which comes after poll.</p>
+
+        <pre><code>// Non-deterministic order
+setTimeout(() => console.log('timeout'), 0);
+setImmediate(() => console.log('immediate'));
+
+// Inside I/O: setImmediate is always first
+const fs = require('fs');
+fs.readFile(__filename, () => {
+  setTimeout(() => console.log('timeout'), 0);
+  setImmediate(() => console.log('immediate'));
+  // Always logs: immediate, timeout
+});</code></pre>
+
+        <h2>2. Promises and Async/Await</h2>
+
+        <h3>Promise States</h3>
+
+        <p>A Promise has three possible states:</p>
+        <ul>
+            <li><strong>Pending</strong> – Initial state, neither fulfilled nor rejected</li>
+            <li><strong>Fulfilled</strong> – Operation completed successfully</li>
+            <li><strong>Rejected</strong> – Operation failed</li>
+        </ul>
+
+        <p>Once settled (fulfilled or rejected), a Promise cannot change state. This immutability is fundamental to
+            Promise behavior.</p>
+        <h3>Promise Chaining</h3>
+
+        <p>Each <code>.then()</code> returns a new Promise. The value you return becomes the fulfillment value of that
+            new Promise:</p>
+
+        <pre><code>Promise.resolve(1)
+  .then(x => x + 1)      // returns 2
+  .then(x => x * 2)      // returns 4
+  .then(x => console.log(x)); // logs 4</code></pre>
+
+        <p>If you return a Promise from <code>.then()</code>, the next <code>.then()</code> waits for that Promise to
+            settle:</p>
+
+        <pre><code>Promise.resolve(1)
+  .then(x => {
+    return new Promise(resolve => {
+      setTimeout(() => resolve(x + 1), 1000);
+    });
+  })
+  .then(x => console.log(x)); // logs 2 after 1 second</code></pre>
+
+        <h3>Async/Await</h3>
+
+        <p>Async/await is syntactic sugar over Promises. An <code>async</code> function always returns a Promise. The
+            <code>await</code> keyword pauses execution until the Promise settles, then returns its value.
+        </p>
+
+        <pre><code>// These are equivalent:
+
+// Promise version
+function getData() {
+  return fetchUser()
+    .then(user => fetchPosts(user.id))
+    .then(posts => ({ user, posts }));
+}
+
+// Async/await version
+async function getData() {
+  const user = await fetchUser();
+  const posts = await fetchPosts(user.id);
+  return { user, posts };
+}</code></pre>
+
+        <div class="note">
+            <strong>Key difference:</strong> With async/await, intermediate values (like <code>user</code>) remain in
+            scope, making code more readable and easier to debug.
+        </div>
+
+        <h3>Error Handling</h3>
+
+        <p>With Promises, errors are caught with <code>.catch()</code>. With async/await, use try/catch:</p>
+
+        <pre><code>// Promise
+fetchData()
+  .then(data => processData(data))
+  .catch(error => handleError(error));
+
+// Async/await
+async function run() {
+  try {
+    const data = await fetchData();
+    await processData(data);
+  } catch (error) {
+    handleError(error);
+  }
+}</code></pre>
+
+        <div class="warning">
+            <strong>Unhandled Rejections:</strong> In Node.js, unhandled Promise rejections currently log a warning but
+            will crash the process in future versions. Always handle rejections.
+        </div>
+
+        <h2>3. Concurrency Patterns</h2>
+
+        <h3>Sequential vs Parallel</h3>
+
+        <p>Sequential execution means operations run one after another. Parallel execution means they start
+            simultaneously:</p>
+
+        <pre><code>// Sequential: ~600ms total
+async function sequential() {
+  const user = await fetchUser();      // 200ms
+  const posts = await fetchPosts();    // 300ms
+  const comments = await fetchComments(); // 100ms
+  return { user, posts, comments };
+}
+
+// Parallel: ~300ms total (longest operation)
+async function parallel() {
+  const [user, posts, comments] = await Promise.all([
+    fetchUser(),      // All three start
+    fetchPosts(),     // at the same time
+    fetchComments()
+  ]);
+  return { user, posts, comments };
+}</code></pre>
+
+        <div class="animation-space">
+            <img src="https://blog.openreplay.com/images/promises-in-parallel/images/image01.jpeg"
+                alt="Sequential vs Parallel Execution" style="max-width: 100%; border-radius: 8px;">
+        </div>
+
+        <h3>Promise Combinators</h3>
+
+        <p><strong>Promise.all(promises)</strong></p>
+        <ul>
+            <li>Waits for all Promises to fulfill</li>
+            <li>Returns array of results in the same order</li>
+            <li>Rejects immediately if any Promise rejects</li>
+        </ul>
+
+        <p><strong>Promise.allSettled(promises)</strong></p>
+        <ul>
+            <li>Waits for all Promises to settle (fulfill or reject)</li>
+            <li>Never rejects</li>
+            <li>Returns array of objects: <code>{ status: 'fulfilled', value }</code> or
+                <code>{ status: 'rejected', reason }</code>
+            </li>
+        </ul>
+
+        <p><strong>Promise.race(promises)</strong></p>
+        <ul>
+            <li>Settles as soon as any Promise settles</li>
+            <li>Takes the state of the first settled Promise</li>
+        </ul>
+
+        <p><strong>Promise.any(promises)</strong></p>
+        <ul>
+            <li>Fulfills when any Promise fulfills</li>
+            <li>Rejects only if all Promises reject</li>
+        </ul>
+
+        <pre><code>// Robust error handling with allSettled
+const results = await Promise.allSettled([
+  fetchUser(),
+  fetchPosts(),
+  fetchComments()
+]);
+
+const user = results[0].status === 'fulfilled' 
+  ? results[0].value 
+  : null;
+
+const posts = results[1].status === 'fulfilled'
+  ? results[1].value
+  : [];</code></pre>
+
+        <h3>Limiting Concurrency</h3>
+
+        <p>Sometimes you need to limit how many operations run simultaneously. This is important when dealing with rate
+            limits or resource constraints:</p>
+
+        <pre><code>async function processWithLimit(items, limit, processFn) {
+  const results = [];
+  const executing = [];
+  
+  for (const item of items) {
+    const promise = processFn(item).then(result => {
+      executing.splice(executing.indexOf(promise), 1);
+      return result;
+    });
+    
+    results.push(promise);
+    executing.push(promise);
+    
+    if (executing.length >= limit) {
+      await Promise.race(executing);
+    }
+  }
+  
+  return Promise.all(results);
+}
+
+// Process 100 items with max 5 concurrent
+await processWithLimit(items, 5, async item => {
+  return await fetch(`/api/process/${item.id}`);
+});</code></pre>
+
+        <h2>4. Common Pitfalls</h2>
+
+        <h3>Blocking the Event Loop</h3>
+
+        <p>The event loop is single-threaded. CPU-intensive synchronous operations block everything:</p>
+
+        <pre><code>// ❌ This blocks the entire server
+app.get('/compute', (req, res) => {
+  let result = 0;
+  for (let i = 0; i < 1e9; i++) {
+    result += i;
+  }
+  res.json({ result });
+});
+
+// ✅ Move CPU-intensive work to worker threads
+const { Worker } = require('worker_threads');
+
+app.get('/compute', async (req, res) => {
+  const worker = new Worker('./compute-worker.js');
+  
+  const result = await new Promise((resolve, reject) => {
+    worker.on('message', resolve);
+    worker.on('error', reject);
+  });
+  
+  res.json({ result });
+});</code></pre>
+
+        <h3>Missing await</h3>
+
+        <p>Forgetting <code>await</code> is a common mistake that leads to subtle bugs:</p>
+
+        <pre><code>// ❌ Wrong: data is a Promise, not the actual data
+async function wrong() {
+  const data = fetchData(); // Missing await!
+  console.log(data); // Promise { <pending> }
+  return data.value; // undefined
+}
+
+// ✅ Correct
+async function correct() {
+  const data = await fetchData();
+  console.log(data); // actual data
+  return data.value;
+}</code></pre>
+
+        <h3>Error Handling in Loops</h3>
+
+        <p>Be careful with error handling when processing arrays:</p>
+
+        <pre><code>// ❌ One failure stops everything
+async function processAll(items) {
+  const results = [];
+  for (const item of items) {
+    results.push(await processItem(item)); // Throws on error
+  }
+  return results;
+}
+
+// ✅ Continue processing even if some fail
+async function processAllRobust(items) {
+  const promises = items.map(item => 
+    processItem(item).catch(err => ({ error: err }))
+  );
+  return await Promise.all(promises);
+}</code></pre>
+
+        <h3>Race Conditions</h3>
+
+        <p>Async operations can complete in unexpected orders:</p>
+
+        <pre><code>// ❌ Race condition
+let latestData = null;
+
+async function fetchLatest(id) {
+  const data = await fetch(`/api/data/${id}`);
+  latestData = data; // What if an older request finishes last?
+}
+
+// ✅ Track request order
+let requestCounter = 0;
+
+async function fetchLatest(id) {
+  const requestId = ++requestCounter;
+  const data = await fetch(`/api/data/${id}`);
+  
+  if (requestId === requestCounter) {
+    latestData = data; // Only use if still the latest
+  }
+}</code></pre>
+
+        <h2>5. Production Best Practices</h2>
+
+        <h3>Timeouts</h3>
+
+        <p>Always set timeouts for external operations:</p>
+
+        <pre><code>async function fetchWithTimeout(url, timeoutMs = 5000) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  
+  try {
+    const response = await fetch(url, { 
+      signal: controller.signal 
+    });
+    clearTimeout(timeoutId);
+    return response;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (error.name === 'AbortError') {
+      throw new Error(`Request timeout after ${timeoutMs}ms`);
+    }
+    throw error;
+  }
+}</code></pre>
+
+        <h3>Graceful Shutdown</h3>
+
+        <p>Handle shutdown signals properly to avoid data loss:</p>
+
+        <pre><code>const activeRequests = new Set();
+
+// Track active operations
+app.use((req, res, next) => {
+  activeRequests.add(req);
+  res.on('finish', () => activeRequests.delete(req));
+  next();
+});
+
+// Graceful shutdown
+async function shutdown() {
+  console.log('Shutting down gracefully...');
+  
+  // Stop accepting new connections
+  server.close();
+  
+  // Wait for active requests to complete (with timeout)
+  const timeout = setTimeout(() => {
+    console.log('Forcing shutdown after timeout');
+    process.exit(1);
+  }, 10000);
+  
+  while (activeRequests.size > 0) {
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  
+  clearTimeout(timeout);
+  process.exit(0);
+}
+
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);</code></pre>
+
+        <h3>Monitoring Event Loop Lag</h3>
+
+        <p>Monitor event loop health in production:</p>
+
+        <pre><code>const { monitorEventLoopDelay } = require('perf_hooks');
+
+const histogram = monitorEventLoopDelay({ resolution: 20 });
+histogram.enable();
+
+setInterval(() => {
+  const lag = histogram.mean / 1e6; // Convert to ms
+  console.log(`Event loop lag: ${lag.toFixed(2)}ms`);
+  
+  if (lag > 50) {
+    console.warn('High event loop lag detected!');
+  }
+  
+  histogram.reset();
+}, 10000);</code></pre>
+
+        <div class="note">
+            <strong>Rule of thumb:</strong> If event loop lag consistently exceeds 50ms, your application is struggling
+            to keep up with the workload.
+        </div>
+
+        <h2>6. libuv: The Backbone of Node.js</h2>
+
+        <p>libuv is a multi-platform support library that provides Node.js with its asynchronous I/O capabilities. It is
+            written in C and acts as an abstraction layer for various operating system mechanisms.</p>
+
+        <h3>Core Features</h3>
+        <ul>
+            <li><strong>Event Loop</strong>: Implements the event loop, which is central to Node.js's non-blocking I/O
+                model.</li>
+            <li><strong>Thread Pool</strong>: Manages a pool of threads for executing tasks that cannot be performed
+                asynchronously, such as file system operations.</li>
+            <li><strong>Asynchronous I/O</strong>: Provides cross-platform asynchronous I/O operations.</li>
+            <li><strong>Utilities</strong>: Includes utilities for DNS resolution, file system watching, and more.</li>
+        </ul>
+
+        <h3>How libuv Works</h3>
+        <p>libuv uses a combination of the following mechanisms to achieve its functionality:</p>
+        <ul>
+            <li><strong>IOCP</strong> (Windows): Input/Output Completion Ports for asynchronous I/O.</li>
+            <li><strong>epoll</strong> (Linux): A scalable I/O event notification system.</li>
+            <li><strong>kqueue</strong> (macOS, FreeBSD): A notification interface for I/O events.</li>
+        </ul>
+
+        <p>By abstracting these platform-specific mechanisms, libuv ensures that Node.js applications behave
+            consistently across different operating systems.</p>
+
+        <div class="note">
+            <strong>Fun Fact:</strong> The name "libuv" stands for "library for Unix and Windows."
+        </div>
+
+        <h3>JavaScript: Single-Threaded vs Node.js Multi-Threading</h3>
+
+        <p>Excellent question — and one that’s often misunderstood.</p>
+
+        <h4>Short answer:</h4>
+        <p><strong>JavaScript itself is <em>single-threaded</em>,</strong> but <strong>Node.js (and browsers) provide
+                multi-threaded capabilities under the hood</strong>.</p>
+
+        <h4>Let’s break it down clearly:</h4>
+
+        <h5>1. The JavaScript engine (like V8)</h5>
+        <ul>
+            <li>Runs <strong>on a single thread</strong>.</li>
+            <li>Executes <strong>one piece of code at a time</strong> — this is the <strong>main thread</strong>.</li>
+            <li>All your synchronous JavaScript runs here: function calls, loops, etc.</li>
+        </ul>
+
+        <pre><code>console.log("A");
+console.log("B");
+// Always prints A then B</code></pre>
+
+        <p>There’s <strong>no true parallelism</strong> in JavaScript execution here — the interpreter processes one
+            statement at a time.</p>
+
+        <h5>⚙️ 2. Node.js and its asynchronous power</h5>
+        <p>Node.js uses the <strong>libuv</strong> library to manage asynchronous I/O — and <em>this</em> is where
+            multi-threading enters the picture.</p>
+
+        <p>When you run asynchronous code like:</p>
+
+        <pre><code>fs.readFile('data.txt', 'utf8', (err, data) => {
+  console.log("File read complete");
+});</code></pre>
+
+        <p>Node.js doesn’t read the file on the main thread. Instead, <strong>libuv offloads</strong> file I/O to a
+            <strong>thread pool</strong> (usually 4 threads by default). When it’s done, it sends a signal back to the
+            <strong>event loop</strong>, which executes your callback.
+        </p>
+
+        <p>So:</p>
+        <ul>
+            <li><strong>JavaScript thread:</strong> 1</li>
+            <li><strong>Worker threads (I/O, crypto, etc.):</strong> multiple</li>
+        </ul>
+
+        <p>→ This gives the <em>illusion</em> of multi-threading, while your JavaScript logic remains single-threaded.
+        </p>
+
+        <h5>3. True multi-threading in Node.js</h5>
+        <p>If you <em>actually</em> want to run JS code in parallel, Node.js offers:</p>
+
+        <ul>
+            <li><strong>Worker Threads API</strong> (introduced in Node.js v10.5.0)</li>
+        </ul>
+
+        <pre><code>const { Worker, isMainThread, parentPort } = require('worker_threads');
+
+if (isMainThread) {
+  new Worker(__filename); // spawns a new thread
+  console.log("Main thread");
+} else {
+  console.log("Worker thread");
+}</code></pre>
+
+        <p>Each worker runs its own JS thread and memory space.<br>⚠️ Communication happens via messages, not shared
+            memory.</p>
+
+        <h5>4. In browsers</h5>
+        <p>The story is similar:</p>
+        <ul>
+            <li>JavaScript runs on a single thread.</li>
+            <li>But browsers have <strong>Web APIs</strong> (for timers, fetch, DOM events) running on separate threads.
+            </li>
+            <li>And for true concurrency, we can use <strong>Web Workers</strong> or <strong>SharedArrayBuffer</strong>.
+            </li>
+        </ul>
+    </div>
+</body>
+
+</html>
