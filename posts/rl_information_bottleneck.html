@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Why Reinforcement Learning Is So Hard: An Information-Theoretic Explanation</title>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        h1,
+        h2,
+        h3 {
+            color: #2c3e50;
+        }
+
+        code {
+            background: #f4f4f4;
+            padding: 2px 5px;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+
+        pre {
+            background: #f4f4f4;
+            padding: 10px;
+            overflow-x: auto;
+            border-radius: 4px;
+        }
+
+        ul {
+            padding-left: 20px;
+        }
+
+        li {
+            margin-bottom: 8px;
+        }
+
+        a {
+            color: #3498db;
+            text-decoration: none;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+
+        figure {
+            margin: 20px 0;
+            text-align: center;
+        }
+
+        figcaption {
+            font-style: italic;
+            color: #555;
+            margin-top: 5px;
+        }
+
+        blockquote {
+            border-left: 4px solid #3498db;
+            margin: 20px 0;
+            padding: 10px 20px;
+            background: #f9f9f9;
+            font-style: italic;
+        }
+
+        .equation {
+            text-align: center;
+            margin: 20px 0;
+            padding: 15px;
+            background: #f9f9f9;
+            border-radius: 4px;
+            font-family: 'Times New Roman', serif;
+            font-size: 1.1em;
+        }
+
+        hr {
+            border: none;
+            border-top: 1px solid #ddd;
+            margin: 30px 0;
+        }
+
+        body.dark-mode {
+            background-color: #030f22;
+            color: #ffffff;
+        }
+
+        body.dark-mode h1,
+        body.dark-mode h2,
+        body.dark-mode h3 {
+            color: #ffffff;
+        }
+
+        body.dark-mode code,
+        body.dark-mode pre {
+            background: #333333;
+        }
+
+        body.dark-mode a {
+            color: #5dade2;
+        }
+
+        body.dark-mode figcaption {
+            color: #bbb;
+        }
+
+        body.dark-mode blockquote {
+            background: #1a2a3a;
+            border-left-color: #5dade2;
+        }
+
+        body.dark-mode .equation {
+            background: #1a2a3a;
+        }
+
+        body.dark-mode hr {
+            border-top-color: #444;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            margin: 10px 0;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            background-color: #e0e0e0;
+            color: #333;
+            transition: background-color 0.3s ease;
+        }
+
+        button:hover {
+            background-color: #ccc;
+        }
+
+        body.dark-mode button {
+            background-color: #444;
+            color: #fff;
+        }
+
+        body.dark-mode button:hover {
+            background-color: #666;
+        }
+
+        #toggleTheme {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        #toggleTheme svg {
+            width: 20px;
+            height: 20px;
+        }
+    </style>
+</head>
+
+<body>
+    <button id="toggleTheme">
+        <span id="themeIcon">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24">
+                <path
+                    d="M21.752 15.002A9.718 9.718 0 0112 21.75a9.75 9.75 0 01-8.485-14.68.75.75 0 011.235-.16 7.5 7.5 0 0010.34 10.34.75.75 0 01.16 1.235z" />
+            </svg>
+        </span>
+        <span>Toggle Theme</span>
+    </button>
+
+    <h1>Why Reinforcement Learning Is So Hard</h1>
+    <h3>An information-theoretic explanation</h3>
+
+    <p>
+        Reinforcement learning (RL) is notoriously inefficient. Compared to supervised learning, it requires vastly more
+        compute, data, and tuning to achieve comparable results.
+    </p>
+    <p>
+        Most explanations focus on the obvious reason: <strong>samples are expensive</strong>. In supervised learning,
+        every token gives you a learning signal. In RL, you may need to unroll an entire trajectory, sometimes tens of
+        thousands of tokens long,just to receive a single reward at the end.
+    </p>
+    <p>But that's only half the story.</p>
+    <p>
+        Even if RL samples were free, RL would <em>still</em> be fundamentally inefficient. The deeper issue is that
+        <strong>most reinforcement learning samples contain very little information</strong>.
+    </p>
+    <p>This post explains why.</p>
+
+    <hr>
+
+    <h2>Bits per FLOP</h2>
+    <p>A useful way to think about learning efficiency is:</p>
+    <div class="equation">
+        Bits per FLOP = Samples per FLOP × Bits per Sample
+    </div>
+    <ul>
+        <li><strong>Samples per FLOP</strong>: how expensive it is to generate feedback</li>
+        <li><strong>Bits per Sample</strong>: how informative that feedback is</li>
+    </ul>
+    <p>Most discussions fixate on the first term. This post is about the second.</p>
+
+    <hr>
+
+    <h2>Supervised learning: dense, directional feedback</h2>
+    <p>In supervised learning, the model is told <strong>exactly what the correct answer is</strong>.</p>
+    <p>
+        If the model assigns probability <em>p</em> to the correct label before seeing it, then observing the label
+        gives:
+    </p>
+    <div class="equation">
+        Information = −log p
+    </div>
+    <p>This quantity has no upper bound. The more wrong the model is, the more it learns.</p>
+    <p>
+        Early in training, when the model is nearly random, every token is maximally surprising. Each one delivers a
+        strong, low-variance gradient that says:
+    </p>
+    <blockquote>"You were wrong in this exact way. Fix these parameters."</blockquote>
+    <p>This is why pretraining is so sample-efficient: <strong>every example is information-dense</strong>.</p>
+
+    <hr>
+
+    <h2>Reinforcement learning: a binary bottleneck</h2>
+    <p>Reinforcement learning works very differently.</p>
+    <p>The model is <em>not</em> told what the correct answer was. It only observes a <strong>binary outcome</strong>:
+    </p>
+    <ul>
+        <li>success (reward)</li>
+        <li>failure (no reward)</li>
+    </ul>
+    <p>
+        If the probability of success is <em>p</em>, then the reward signal is a Bernoulli random variable. The maximum
+        information you can extract from observing it is its entropy:
+    </p>
+    <div class="equation">
+        H(p) = −p log p − (1−p) log(1−p)
+    </div>
+    <p>This single equation explains a huge fraction of RL's difficulties.</p>
+
+    <hr>
+
+    <h2>What entropy tells us</h2>
+    <p>The entropy of a binary outcome has three crucial properties:</p>
+    <ol>
+        <li>
+            <strong>It is capped at 1 bit</strong><br>
+            (achieved only when <em>p = 0.5</em>)
+        </li>
+        <li>
+            <strong>It goes to zero when outcomes are predictable</strong><br>
+            If <em>p ≈ 0</em> or <em>p ≈ 1</em>, the outcome contains almost no information.
+        </li>
+        <li>
+            <strong>It peaks in a narrow "Goldilocks" regime</strong><br>
+            RL learns best only when success is genuinely uncertain.
+        </li>
+    </ol>
+    <p>This is a fundamental information bottleneck. No algorithm can escape it.</p>
+
+    <hr>
+
+    <h2>Why RL is information-starved early in training</h2>
+    <p>Consider next-token prediction using RL.</p>
+    <p>For a randomly initialized language model, the probability of sampling the correct token is roughly:</p>
+    <div class="equation">
+        p ≈ 1/|vocab| ~ 10<sup>−5</sup>
+    </div>
+    <p>In this regime:</p>
+    <ul>
+        <li>The model almost always fails</li>
+        <li>Failure is completely unsurprising</li>
+        <li>The entropy of the reward signal is effectively zero</li>
+    </ul>
+    <p><strong>Most RL samples early in training carry almost no information.</strong></p>
+    <p>This is true even before accounting for long trajectories, delayed rewards, or credit assignment.</p>
+
+    <hr>
+
+    <h2>Comparing supervised learning and RL</h2>
+    <h3>Bits per sample vs pass rate</h3>
+    <p>If we plot:</p>
+    <ul>
+        <li>Supervised learning: <em>−log p</em></li>
+        <li>Reinforcement learning: <em>H(p)</em></li>
+    </ul>
+    <p>
+        we see that supervised learning provides far more information when the model is weak, while RL only becomes
+        competitive near the end of training.
+    </p>
+
+    <figure>
+        <img src="images/rl_vs_sl.webp" alt="RL vs Supervised Learning: Bits per Sample"
+            style="max-width: 100%; height: auto; border:1px dashed #ccc; padding: 20px; box-sizing: border-box;" />
+        <figcaption>Figure 1: Comparison of information content between supervised learning (−log p) and reinforcement
+            learning entropy H(p) as a function of pass rate</figcaption>
+    </figure>
+
+    <h3>Why the linear plot is misleading</h3>
+    <p>Scaling laws tell us something important:</p>
+    <blockquote>Equal amounts of compute buy <strong>equal multiplicative improvements</strong> in performance.
+    </blockquote>
+    <p>That means training progress should be viewed on a <strong>log scale</strong>, not a linear one.</p>
+    <p>When we plot bits per sample against <strong>log pass rate</strong>, the picture becomes stark:</p>
+    <ul>
+        <li>Almost all compute is spent in regions where RL entropy is near zero</li>
+        <li>The region where RL has meaningful information density is a <em>tiny sliver</em> at the very end</li>
+        <li>This inefficiency is structural, not accidental</li>
+    </ul>
+
+    <hr>
+
+    <h2>Variance makes things even worse</h2>
+    <p>Low entropy doesn't just reduce signal, it explodes variance.</p>
+    <p>Early in RL training:</p>
+    <ul>
+        <li>Most batches contain zero successful trajectories → no learning</li>
+        <li>Rare successes produce massive, noisy gradient spikes</li>
+    </ul>
+    <p>
+        The situation for RL early in training is actually even worse than described above. When the pass rate is low,
+        your gradient estimate is going to be incredibly noisy and unpredictable. Either you don't sample the correct
+        answer at all in your batch, in which case you get almost no information. Or you do, and you get this giant
+        spike. You're getting jerked around, which is terrible for performant training.
+    </p>
+    <p>Training becomes unstable and unpredictable.</p>
+    <p>
+        Interestingly, supervised learning has the opposite problem: variance explodes at the <em>end</em> of training,
+        when most remaining loss is irreducible noise. This likely explains why batch sizes increase late in
+        pretraining.
+    </p>
+
+    <hr>
+
+    <h2>The Working zone of RL</h2>
+    <p>RL works best when the model's pass rate is neither too low nor too high.</p>
+    <p>This explains several empirical facts:</p>
+    <ul>
+        <li>Curriculum learning is essential for RL</li>
+        <li>Self-play works by stabilizing success near 50%</li>
+        <li>Pretraining and inference scaling are prerequisites for effective RL</li>
+        <li>RL often looks like "capability elicitation" rather than de novo learning</li>
+    </ul>
+    <p><strong>RL amplifies intelligence once it already exists.</strong></p>
+
+    <hr>
+
+    <h2>Why RL produces jagged intelligence</h2>
+    <p>RL reinforces what it <em>samples</em>, not what is <em>best in principle</em>.</p>
+    <p>
+        Simple heuristics that occasionally work are exponentially more likely to be sampled than complex, general
+        strategies. Once such a heuristic crosses the success threshold, RL rapidly drives it to fixation, even if it
+        doesn't generalize.
+    </p>
+    <p>Binary rewards cannot reliably distinguish:</p>
+    <ul>
+        <li>a robust reasoning process</li>
+        <li>from a brittle pattern match that happens to work</li>
+    </ul>
+    <p>This helps explain why models can be world-class on benchmarks yet make shockingly foreseeable mistakes.</p>
+
+    <hr>
+
+    <h2>Humans don't learn this way</h2>
+    <p>Human learning does not primarily come from binary outcomes.</p>
+    <p>A repeat entrepreneur does not learn only from whether the last startup succeeded. They learn from:</p>
+    <ul>
+        <li>observation</li>
+        <li>structure</li>
+        <li>mistakes</li>
+        <li>reflection</li>
+        <li>counterfactual reasoning</li>
+    </ul>
+    <p>If intelligence were learned purely from success/failure signals, human expertise would be impossible.</p>
+
+    <hr>
+
+    <h2>Takeaway</h2>
+    <blockquote>
+        Reinforcement learning is hard not just because samples are expensive, but because <strong>most RL samples
+            contain almost no information</strong>.
+    </blockquote>
+    <p>This is a fundamental limitation of binary feedback.</p>
+    <p>If we want RL-style training to scale further, the real question may not be:</p>
+    <blockquote><em>How do we squeeze more bits out of rewards?</em></blockquote>
+    <p>But instead:</p>
+    <blockquote>
+        <strong>How do we learn from the environment the way humans do, by extracting structure, not just
+            outcomes?</strong>
+    </blockquote>
+
+    <script>
+        // Theme toggle functionality
+        function toggleDarkMode() {
+            document.body.classList.toggle('dark-mode');
+            const isDarkMode = document.body.classList.contains('dark-mode');
+            localStorage.setItem('darkMode', isDarkMode ? 'enabled' : 'disabled');
+
+            // Update icon based on theme
+            const themeIcon = document.getElementById('themeIcon');
+            if (isDarkMode) {
+                // Sun Icon for Dark Mode
+                themeIcon.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 2.25a.75.75 0 01.75.75v2.25a.75.75 0 01-1.5 0V3a.75.75 0 01.75-.75zM7.5 12a4.5 4.5 0 119 0 4.5 4.5 0 01-9 0zM18.894 6.166a.75.75 0 00-1.06-1.06l-1.591 1.59a.75.75 0 101.06 1.061l1.591-1.59zM21.75 12a.75.75 0 01-.75.75h-2.25a.75.75 0 010-1.5h2.25a.75.75 0 01.75.75zM17.834 18.894a.75.75 0 001.06-1.06l-1.59-1.591a.75.75 0 10-1.061 1.06l1.59 1.591zM12 18a.75.75 0 01.75.75v2.25a.75.75 0 01-1.5 0V18.75a.75.75 0 01.75-.75zM7.166 17.834a.75.75 0 00-1.06 1.06l1.59 1.591a.75.75 0 101.061-1.06l-1.59-1.591zM6.25 12a.75.75 0 01-.75.75H3a.75.75 0 010-1.5h2.5a.75.75 0 01.75.75zM6.166 7.166a.75.75 0 00-1.06 1.06l1.591 1.59a.75.75 0 101.06-1.061l-1.591-1.59z"/>
+                    </svg>`;
+            } else {
+                // Moon Icon for Light Mode
+                themeIcon.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M21.752 15.002A9.718 9.718 0 0112 21.75a9.75 9.75 0 01-8.485-14.68.75.75 0 011.235-.16 7.5 7.5 0 0010.34 10.34.75.75 0 01.16 1.235z" />
+                    </svg>`;
+            }
+        }
+
+        document.getElementById('toggleTheme').addEventListener('click', toggleDarkMode);
+
+        // Persist theme across sessions and set initial icon
+        window.onload = function () {
+            const darkMode = localStorage.getItem('darkMode');
+            if (darkMode === 'enabled') {
+                toggleDarkMode(); // Apply dark mode and set icon
+                toggleDarkMode(); // Toggle back to ensure correct initial state if already dark
+            } else {
+                // Ensure light mode icon is set initially
+                const themeIcon = document.getElementById('themeIcon');
+                themeIcon.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M21.752 15.002A9.718 9.718 0 0112 21.75a9.75 9.75 0 01-8.485-14.68.75.75 0 011.235-.16 7.5 7.5 0 0010.34 10.34.75.75 0 01.16 1.235z" />
+                    </svg>`;
+            }
+        };
+
+    </script>
+</body>
+
+</html>
