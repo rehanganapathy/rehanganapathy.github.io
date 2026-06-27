@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Teaching an LLM to Lie, Cooperate, and Read the Room: Building SpeedRun</title>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        h1,
+        h2,
+        h3 {
+            color: #2c3e50;
+        }
+
+        code {
+            background: #f4f4f4;
+            padding: 2px 5px;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+
+        pre {
+            background: #f4f4f4;
+            padding: 10px;
+            overflow-x: auto;
+            border-radius: 4px;
+            font-size: 0.82em;
+            line-height: 1.4;
+        }
+
+        ul,
+        ol {
+            padding-left: 20px;
+        }
+
+        li {
+            margin-bottom: 8px;
+        }
+
+        a {
+            color: #3498db;
+            text-decoration: none;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+
+        figure {
+            margin: 20px 0;
+            text-align: center;
+        }
+
+        figure img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 6px;
+            border: 1px solid #ddd;
+        }
+
+        figcaption {
+            font-style: italic;
+            color: #555;
+            margin-top: 5px;
+            font-size: 0.92em;
+        }
+
+        blockquote {
+            border-left: 4px solid #3498db;
+            margin: 20px 0;
+            padding: 10px 20px;
+            background: #f9f9f9;
+        }
+
+        table {
+            border-collapse: collapse;
+            margin: 20px 0;
+            width: 100%;
+            font-size: 0.92em;
+        }
+
+        th,
+        td {
+            border: 1px solid #ddd;
+            padding: 8px 12px;
+            text-align: left;
+        }
+
+        th {
+            background: #f4f4f4;
+            font-weight: 600;
+        }
+
+        tbody tr:nth-child(even) {
+            background: #fafafa;
+        }
+
+        .subtitle {
+            color: #6e6e73;
+            font-size: 1.05em;
+            margin-bottom: 10px;
+        }
+
+        hr {
+            border: none;
+            border-top: 1px solid #ddd;
+            margin: 30px 0;
+        }
+
+        body.dark-mode {
+            background-color: #030f22;
+            color: #ffffff;
+        }
+
+        body.dark-mode h1,
+        body.dark-mode h2,
+        body.dark-mode h3 {
+            color: #ffffff;
+        }
+
+        body.dark-mode code,
+        body.dark-mode pre {
+            background: #333333;
+        }
+
+        body.dark-mode a {
+            color: #5dade2;
+        }
+
+        body.dark-mode figcaption {
+            color: #bbb;
+        }
+
+        body.dark-mode figure img {
+            border-color: #444;
+        }
+
+        body.dark-mode blockquote {
+            background: #1a2a3a;
+            border-left-color: #5dade2;
+        }
+
+        body.dark-mode .subtitle {
+            color: #a1a1a6;
+        }
+
+        body.dark-mode th {
+            background: #1a2a3a;
+        }
+
+        body.dark-mode th,
+        body.dark-mode td {
+            border-color: #444;
+        }
+
+        body.dark-mode tbody tr:nth-child(even) {
+            background: #0b1b30;
+        }
+
+        body.dark-mode hr {
+            border-top-color: #444;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            margin: 10px 0;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            background-color: #e0e0e0;
+            color: #333;
+            transition: background-color 0.3s ease;
+        }
+
+        button:hover {
+            background-color: #ccc;
+        }
+
+        body.dark-mode button {
+            background-color: #444;
+            color: #fff;
+        }
+
+        body.dark-mode button:hover {
+            background-color: #666;
+        }
+
+        #toggleTheme {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        #toggleTheme svg {
+            width: 20px;
+            height: 20px;
+        }
+    </style>
+</head>
+
+<body>
+    <button id="toggleTheme">
+        <span id="themeIcon">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24">
+                <path
+                    d="M21.752 15.002A9.718 9.718 0 0112 21.75a9.75 9.75 0 01-8.485-14.68.75.75 0 011.235-.16 7.5 7.5 0 0010.34 10.34.75.75 0 01.16 1.235z" />
+            </svg>
+        </span>
+        <span>Toggle Theme</span>
+    </button>
+
+    <h1>Teaching an LLM to Lie, Cooperate, and Read the Room</h1>
+    <h3>Building SpeedRun — a hidden-motives social environment</h3>
+    <p class="subtitle">Rehan Ganapathy · April 2026 · OpenEnv × Hugging Face India Hackathon</p>
+
+    <hr>
+
+    <h2>The Problem I Wanted to Solve</h2>
+    <p>
+        For the past year or so we've been sold the idea of agents acting on our behalf — doing our chores, making
+        payments, booking our travel. But like every system before it, the moment agents transact in the open they'll
+        meet adversarial players trying to pull a fast one. That's not an edge case; it's the default condition of human
+        social life, which is a continuous stream of multi-objective, context-dependent negotiations against players
+        whose goals you can't see.
+    </p>
+    <p>
+        Most multi-agent RL benchmarks reward simple optimization: collect the most coins, win the most games, maximize a
+        single scalar. Real strategic behavior — negotiation, coalition-forming, social maneuvering — is different in
+        three concrete ways. Agents have <strong>private objectives</strong> they don't announce. They send
+        <strong>cheap-talk signals</strong> that may or may not reflect intent. And the
+        <strong>same action carries different meaning depending on world state</strong> (cooperating at the office in a
+        boom is not the same move as cooperating there in a crisis).
+    </p>
+    <p>
+        I wanted a small, reproducible world where hidden motives, adversarial opponents, and macro-economic shocks are
+        <em>load-bearing features</em> rather than noise to average away — and then to see how far an 8B model could get
+        on it with a two-phase SFT → GRPO pipeline run entirely on Hugging Face Jobs.
+    </p>
+    <p>
+        The result is <strong>SpeedRun: the Hidden-Motives Social Environment (HMNE)</strong>. This post is an honest
+        account — including where the results are robust, where they aren't, and what the training objective can and
+        can't actually teach.
+    </p>
+
+    <hr>
+
+    <h2>The Environment</h2>
+    <p>
+        SpeedRun is a 3-agent, 20-timestep social environment with a text-action interface, served as a FastAPI server
+        compatible with the OpenEnv protocol. The learner is an LLM; the other two are scripted opponents drawn from a
+        pool.
+    </p>
+    <p>Each step, the learner submits a structured text action:</p>
+    <pre><code>&lt;action&gt;{"location": "office", "strategy": "cooperate", "offer": 2, "signal": "trade"}&lt;/action&gt;</code></pre>
+    <p>
+        Four locations (office, home, gym, social) each have distinct payoff structures across three reward dimensions:
+        money, health, and social_capital. The learner has <strong>private</strong> preference weights over these
+        dimensions, sampled from a Dirichlet at every reset — and so do the opponents, who never reveal them. Utility is
+        <code>dot(private_weights, reward_vector)</code>, so the same physical outcome is worth different amounts to
+        different agents.
+    </p>
+    <p>
+        Payoffs are deliberately non-trivial. At the office, mutual cooperation pays (+5, −1, +1) per agent, but a
+        defector against a cooperator walks away with (+8, −2, −2) while punishing the other. At the social location it
+        inverts: cooperation yields (−1, 0, +5), nearly worthless to a money-focused agent but decisive for one scoring
+        social capital.
+    </p>
+    <p>On top of this, the world runs a Markov chain over three macro-states:</p>
+    <ul>
+        <li><strong>NORMAL</strong> (≈55% stationary): modifiers [1.0, 1.0, 1.0]</li>
+        <li><strong>BOOM</strong> (≈25%): money and social amplified [1.5, 1.0, 1.2]</li>
+        <li><strong>CRISIS</strong> (≈20%): money collapses, social amplifies [0.3, 1.0, 1.5], and office access is
+            partially blocked</li>
+    </ul>
+    <p>
+        Six named event cards (Layoff Rumors, Market Rally, Community Festival, …) can activate mid-episode, each
+        reshaping location-specific payoffs and leaking a noisy private signal visible only to the learner — a thin
+        information asymmetry the policy can try to exploit.
+    </p>
+    <p>
+        A token economy sits on top: each agent starts with 10 tokens, can attach an <code>offer</code> to each action,
+        and tokens split among co-located cooperators. Unspent tokens convert to utility at episode end (×0.3). One
+        mechanic, three emergent uses — bribery, reciprocity, and costly-signal commitment — with no special-casing in
+        the policy.
+    </p>
+
+    <hr>
+
+    <h2>The Action Space</h2>
+    <p>Every step, the agent submits exactly one structured action:</p>
+    <pre><code>&lt;action&gt;{"location": "...", "strategy": "...", "offer": N, "signal": "..."}&lt;/action&gt;</code></pre>
+    <p>Four independent dimensions, each with a distinct strategic purpose.</p>
+
+    <h3>Location — where you go this step</h3>
+    <table>
+        <thead>
+            <tr><th>Location</th><th>Character</th></tr>
+        </thead>
+        <tbody>
+            <tr><td><code>office</code></td><td>High money upside. Mutual coop pays (+5,−1,+1); defection pays (+8,−2,−2). Best during BOOM. Access can be blocked during CRISIS.</td></tr>
+            <tr><td><code>home</code></td><td>Safe retreat. Solo reward (0,+2,−1) — health regardless of opponents. Useful for recovering tokens and trust.</td></tr>
+            <tr><td><code>gym</code></td><td>Solo grind. Strong solo health (0,+3,−1) independent of co-location. Low social upside but immune to defection.</td></tr>
+            <tr><td><code>social</code></td><td>Social-capital hot-spot. Coop pays (−1,0,+5); defection punishes both sides heavily. Best during CRISIS.</td></tr>
+        </tbody>
+    </table>
+    <p>
+        Location choice is the loudest signal of intent — opponents track your visit history and form behavioral models
+        from it. Going somewhere unexpected is itself information.
+    </p>
+
+    <h3>Strategy — your stance toward co-located agents</h3>
+    <table>
+        <thead>
+            <tr><th>Strategy</th><th>Effect</th></tr>
+        </thead>
+        <tbody>
+            <tr><td><code>cooperate</code></td><td>Higher joint payoff when mutual. Builds trust (+0.06/step). Required to receive token offers.</td></tr>
+            <tr><td><code>defect</code></td><td>Extracts value unilaterally when opponent cooperates. Erodes trust (−0.10 to −0.20/step). Triggers TitForTat retaliation; read as exploitability by GreedyMoney.</td></tr>
+        </tbody>
+    </table>
+    <p>
+        Strategy only changes payoffs when you share a location with another agent. Go somewhere alone and it has no
+        payoff effect — but it still moves trust scores, because opponent strategies are observed whenever co-located.
+    </p>
+
+    <h3>Offer — tokens transferred to co-located cooperators</h3>
+    <p>
+        Tokens are the costly-commitment mechanism. When you attach <code>offer=N</code> and cooperate, that N is split
+        among co-located opponents who also cooperated; defectors get nothing; if nobody cooperates you keep your tokens.
+        Strategic uses:
+    </p>
+    <ul>
+        <li><strong>Costly signal of intent</strong> — an offer is harder to fake than a word, because it spends a real
+            resource.</li>
+        <li><strong>Bribe a defection-prone opponent into cooperating</strong> (works on TitForTat, less on
+            GreedyMoney).</li>
+        <li><strong>Build reciprocity</strong> — TitForTat mirrors your offer on the next step.</li>
+    </ul>
+    <p>
+        Unspent tokens convert to utility at episode end (×0.3), so hoarding is a valid late-game play — just not a
+        reputation-building one.
+    </p>
+
+    <h3>Signal — a public one-word broadcast, visible to all agents</h3>
+    <table>
+        <thead>
+            <tr><th>Signal</th><th>Meaning and effect</th></tr>
+        </thead>
+        <tbody>
+            <tr><td><code>none</code></td><td>Silent. No information leaked, no consistency penalty. Best when your true strategy would contradict any honest signal.</td></tr>
+            <tr><td><code>help</code></td><td>Cooperative intent. Softens TitForTat's retaliation; makes Coordinator more likely to meet you. Incurs −0.1 if you defect this step.</td></tr>
+            <tr><td><code>trade</code></td><td>Willingness to exchange. Cooperative, but GreedyMoney reads it as exploitability and raises its defect probability. Same −0.1 if you defect.</td></tr>
+            <tr><td><code>back-off</code></td><td>Warning / withdrawal. Triggers defensive defection in TitForTat; suppresses Coordinator following. No consistency penalty — you can defect freely after it.</td></tr>
+        </tbody>
+    </table>
+    <p>
+        Signals are public — every agent sees every signal every step. The consistency penalty (−0.1 for help/trade then
+        defect) is small enough to ignore occasionally but adds up over 20 steps. Crucially, an always-help-always-defect
+        policy doesn't just eat the penalty; it <em>telegraphs</em> itself to TitForTat and Coordinator. (Whether the
+        optimizer can actually exploit that telegraphing is a subtler question — I come back to it in the reward
+        section.)
+    </p>
+
+    <h3>Putting it together</h3>
+    <p>
+        The space is 4 × 2 × (up to 11 offers) × 4 ≈ 350 distinct actions per step, capped by token balance. The
+        interesting property is that the optimal action is never stable: it depends on who is co-located, the
+        macro-context, any active event card, your private weights, and accumulated trust. The same
+        <code>office + cooperate + offer=2 + signal=trade</code> is excellent against TitForTat in a BOOM, mediocre in
+        NORMAL, and nearly irrelevant in a CRISIS where money collapses to ×0.3.
+    </p>
+
+    <hr>
+
+    <h2>The Opponents: From Predictable to Adversarial</h2>
+    <p>Four archetypes, deployed across five curriculum pools:</p>
+    <ul>
+        <li><strong>GreedyMoney</strong> defects 75–90% of the time and reads your <code>trade</code> signal as
+            exploitability.</li>
+        <li><strong>TitForTat</strong> mirrors your last action and reciprocates token offers exactly.</li>
+        <li><strong>Coordinator</strong> follows a partner agent ~80% of the time but can be peeled away with a credible
+            <code>help</code> signal.</li>
+        <li><strong>Chameleon</strong> — the adversarial one — mirrors your <em>previous</em> location, strategy, and
+            signal with injected noise. It's purpose-built to defeat behavior-inference: a policy that estimates opponent
+            weights by watching their actions gets fed a corrupted reflection of itself.</li>
+    </ul>
+    <p>
+        The <strong>deceptive</strong> pool pairs Chameleon with Coordinator. It's where the most interesting separation
+        shows up — and, as you'll see, the only result I'd defend without an asterisk.
+    </p>
+
+    <hr>
+
+    <h2>The Reward Function</h2>
+    <p>Seven components, all capped at zero except utility:</p>
+    <table>
+        <thead>
+            <tr><th>Component</th><th>Purpose</th></tr>
+        </thead>
+        <tbody>
+            <tr><td><code>r_format</code></td><td>Valid <code>&lt;action&gt;...&lt;/action&gt;</code> tag</td></tr>
+            <tr><td><code>r_validity</code></td><td>JSON parses, location/strategy valid</td></tr>
+            <tr><td><code>r_access</code></td><td>Didn't visit a blocked location</td></tr>
+            <tr><td><code>r_utility</code></td><td>dot(private_weights, modulated_payoffs) × 0.4</td></tr>
+            <tr><td><code>r_antihack</code></td><td>−2 for prompt-injection patterns</td></tr>
+            <tr><td><code>r_risk</code></td><td>−0.05 × var(utility[-5:]) after step 5</td></tr>
+            <tr><td><code>r_signal_consistency</code></td><td>−0.1 for signaling help/trade while defecting</td></tr>
+        </tbody>
+    </table>
+    <p>
+        The penalty-only framing on the compliance terms is deliberate: compliance only gets you to zero; only
+        <code>r_utility</code> drives positive reward. <code>r_risk</code> discourages strategy whiplash;
+        <code>r_signal_consistency</code> puts a real (small) cost on lying with cheap talk.
+    </p>
+    <p>
+        <strong>One design choice deserves to be stated plainly, because it shapes everything downstream: the GRPO reward
+        is single-step.</strong> For each generated completion the trainer replays the environment to the exact prompt
+        state and takes <em>one</em> env step, returning that step's combined reward
+        (<code>hmne/grpo_data.py::evaluate_completion</code>). The advantage inside each GRPO group therefore reflects
+        only the immediate next-step utility difference between completions.
+    </p>
+    <p>
+        That has an honest and important consequence. The two mechanics I'm proudest of — the public cheap-talk channel
+        and the trust/reputation system — pay off <em>downstream</em>: a <code>help</code> signal changes how Coordinator
+        behaves <em>next</em> step; betrayal lowers trust and costs you a coalition <em>later</em>. A one-step reward
+        never sees those steps. So from the optimizer's point of view, the only thing it can directly learn about
+        signaling is the −0.1 consistency shaping — not the strategic <em>value</em> of honest signaling. The multi-step
+        reasoning in SpeedRun is supplied by two other places: the <strong>SFT teacher's 3-step lookahead</strong> and
+        the <strong>curriculum</strong>, not the RL gradient. I think that's a more interesting story than pretending the
+        gradient does it all, and it points straight at the most valuable next experiment (trajectory returns — see
+        Limitations).
+    </p>
+
+    <hr>
+
+    <h2>Training Pipeline: SFT → Curriculum GRPO on HF Jobs</h2>
+    <p>
+        <strong>Phase 1 — Rollout-Search SFT.</strong> Rather than hand-labeling demonstrations, I built a search
+        teacher: for each training state, enumerate all valid (location × strategy × offer) candidates, simulate 3 steps
+        forward through a <em>copy of the environment</em> with a heuristic continuation agent (γ=0.95), and take the
+        highest-scoring candidate as the label. A deterministic rule then assigns a consistency-preserving signal (never
+        <code>help</code>/<code>trade</code> while defecting). This produced ~270 examples spanning all pools, contexts,
+        event cards, and access shocks.
+    </p>
+    <p>
+        I trained Qwen3-8B with a rank-16 LoRA adapter using Unsloth + TRL's SFTTrainer (4-bit, 3 epochs). Loss dropped
+        2.24 → 0.12 over 51 steps; token accuracy reached 95.5% by step 34 — past the 95% bar I set before letting GRPO
+        start.
+    </p>
+
+    <figure>
+        <img src="images/hmne_sft_curves.png" alt="SFT training curves" />
+        <figcaption>SFT warmup: loss 2.24 → 0.12 over 51 steps (3 epochs); token accuracy crosses 95% by step 34.
+            Dashed lines mark epoch boundaries.</figcaption>
+    </figure>
+
+    <p>
+        <strong>Phase 2 — Curriculum GRPO.</strong> Starting from the SFT adapter, four sequential GRPO stages, each with
+        a fresh prompt dataset from a progressively harder pool:
+    </p>
+    <table>
+        <thead>
+            <tr><th>Stage</th><th>Pool</th><th>Steps</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>1</td><td>easy (2× GreedyMoney)</td><td>25</td></tr>
+            <tr><td>2</td><td>mixed (Greedy + TitForTat)</td><td>30</td></tr>
+            <tr><td>3</td><td>hard (Coordinator + TitForTat)</td><td>30</td></tr>
+            <tr><td>4</td><td>deceptive (Chameleon + Coordinator)</td><td>20</td></tr>
+        </tbody>
+    </table>
+    <p>
+        The reward replays the environment from a captured <code>(episode_seed, prefix_actions)</code> state for each
+        completion, with a hard prompt-equality check — so the training signal is grounded in exact prompt-state
+        correspondence, not an approximation. A useful invariant falls out of this: because the env is rebuilt
+        deterministically per completion, all 8 group samples face identical opponent moves, so the group advantage
+        isolates the learner's own one-step payoff. Clean credit assignment — for a one-step objective.
+    </p>
+    <p>
+        <strong>Infrastructure.</strong> GRPO ran on Hugging Face Jobs (H200, 141 GB). The launchers package
+        <code>hmne/</code>, base64-encode it with the entrypoint, and reconstruct everything inside the container — no
+        Docker builds, no registry pushes. On the H200 each step ran in ~10s (vs ~125s on an A10G), completing all 105
+        steps across four stages in under 25 minutes; total wall time including SFT was under 45 minutes.
+    </p>
+
+    <hr>
+
+    <h2>Training Report</h2>
+    <p>
+        The most informative signal is how reward evolves <em>within</em> each stage — not the global mean, which is
+        compressed by the behavior reset at each stage transition.
+    </p>
+    <table>
+        <thead>
+            <tr><th>Stage</th><th>First-half mean</th><th>Second-half mean</th><th>Δ</th><th>Zero-grad steps</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>easy</td><td>0.397</td><td>0.351</td><td>−0.046</td><td>40%</td></tr>
+            <tr><td>mixed</td><td>0.438</td><td>0.679</td><td>+0.241</td><td>27%</td></tr>
+            <tr><td>hard</td><td>0.134</td><td>0.620</td><td>+0.486</td><td>30%</td></tr>
+            <tr><td>deceptive</td><td>0.330</td><td>0.490</td><td>+0.159</td><td>20%</td></tr>
+        </tbody>
+    </table>
+    <p>
+        <strong>Easy</strong> shows no within-stage improvement, for a defensible reason: SFT already solved GreedyMoney,
+        the policy collapses to near-deterministic behavior immediately, and 40% of steps have zero reward variance
+        across all 8 generations. No variance, no gradient — a ceiling effect, not a failure.
+    </p>
+    <p>
+        <strong>Hard</strong> is the most striking on the training side: mean reward climbs 0.13 → 0.62 within 30 steps,
+        with the highest <code>reward_std</code> of any stage (0.425) — the policy is genuinely exploring, not converging
+        prematurely. (Hold that thought; the <em>eval</em> picture for hard is messier, and I'll be honest about why
+        below.)
+    </p>
+    <p>
+        KL stayed in the 1.5–2.0 band throughout, no stage diverged, grad-norm spikes (up to ~17) were occasional rather
+        than systematic.
+    </p>
+
+    <figure>
+        <img src="images/hmne_grpo_curves.png" alt="GRPO training curves across four curriculum stages" />
+        <figcaption>GRPO across the four curriculum stages. Within-stage reward improvement shows adaptation to each new
+            pool — but because the reward is single-step, it's not evidence of multi-step strategic competence on its
+            own.</figcaption>
+    </figure>
+
+    <hr>
+
+    <h2>Results</h2>
+    <p>
+        I evaluated the heuristic baseline and the GRPO adapter head-to-head with <strong>paired seeds</strong> (same
+        <code>episode_seed</code> per policy), 20 steps, on each pool. The adapter decodes greedily
+        (<code>do_sample=False</code>), so its rollouts are deterministic. Here is the summary table — and then the part
+        that matters more, the per-seed spread underneath it.
+    </p>
+    <table>
+        <thead>
+            <tr><th>Pool</th><th>Heuristic</th><th>GRPO</th><th>Δ</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>easy</td><td>10.15</td><td>11.05</td><td>+8.9%</td></tr>
+            <tr><td>mixed</td><td>20.80</td><td>21.91</td><td>+5.3%</td></tr>
+            <tr><td>hard</td><td>30.17</td><td>24.13</td><td>−19.9%</td></tr>
+            <tr><td>deceptive</td><td>18.19</td><td>25.47</td><td>+40.0%</td></tr>
+        </tbody>
+    </table>
+    <p style="text-align:center; color:#888; font-size:0.9em;">means over 3 seeds: 3407, 3408, 3409</p>
+    <p>
+        <strong>With n = 3 seeds, those percentages are not trustworthy on their own, and I don't want to present them as
+        if they were.</strong> Here is the same data unrolled per seed:
+    </p>
+    <pre><code>                 seed 3407   3408    3409   │ verdict
+ easy   heur      0.81     16.75   12.90    │ GRPO wins 2/3, huge spread
+        GRPO      2.38     13.53   17.24    │
+ mixed  heur      6.88     31.92   23.62    │ GRPO wins 2/3
+        GRPO     12.89     28.69   24.15    │
+ hard   heur     43.05     23.60   23.85    │ one heuristic-lucky seed
+        GRPO     22.49     21.56   28.34    │ drives the whole "regression"
+ deceptive heur  18.76     16.63   19.18    │ GRPO dominates ALL 3 seeds
+           GRPO  21.51     24.98   29.92    │ (min 21.5 &gt; max 18.8)</code></pre>
+    <p>Three honest readings:</p>
+    <ol>
+        <li><strong>Deceptive is the real result.</strong> Every GRPO seed beats every heuristic seed — the worst GRPO
+            episode (21.5) clears the best heuristic episode (19.2). That's a clean separation with no seed overlap,
+            exactly on the pool where the Chameleon is designed to break observation-based heuristics. This is the
+            headline I'd actually stand behind.</li>
+        <li><strong>The "−19.9% on hard" is mostly one seed.</strong> The heuristic's hard mean is inflated by seed 3407
+            (43.05). Strip that outlier and the heuristic averages ~23.7 against GRPO's ~24.1 — i.e. GRPO would edge it.
+            The honest statement is not "GRPO regresses on hard"; it's "on hard the two policies are within noise, and a
+            single heuristic-favorable seed flips the sign of the mean delta."</li>
+        <li><strong>Easy and mixed favor GRPO on 2 of 3 seeds</strong>, but the within-pool variance (easy heuristic
+            ranges 0.81 → 16.75) dwarfs the between-policy gap. I report them as <em>suggestive, not significant.</em></li>
+    </ol>
+    <p>
+        The per-component breakdown supports reading (1) as utility, not just compliance: on deceptive the GRPO adapter
+        extracts more <code>r_utility</code> per step than the heuristic <em>and</em> posts a smaller (less negative)
+        <code>r_risk</code>, i.e. it scores higher and more stably. The compliance terms
+        (<code>r_format</code>/<code>r_validity</code>/<code>r_access</code>) are ≈0 for both policies post-SFT, so
+        they're not where the difference lives.
+    </p>
+
+    <figure>
+        <img src="images/hmne_grpo_vs_heuristic.png" alt="GRPO vs heuristic episode reward by opponent pool" />
+        <figcaption>Mean episode reward by opponent pool, GRPO adapter vs heuristic baseline. Read within-pool only —
+            absolute reward isn't comparable across pools with different opponent structure.</figcaption>
+    </figure>
+
+    <hr>
+
+    <h2>Limitations and Threats to Validity</h2>
+    <p>I'd rather a reader leave knowing exactly how much weight each claim can bear.</p>
+    <ul>
+        <li><strong>The objective is myopic.</strong> GRPO optimizes a single-step reward. Trust dynamics, reputation
+            persistence, and the downstream effect of cheap talk are not in the gradient. Multi-step strategy enters only
+            via the SFT teacher's 3-step lookahead and the curriculum. Any claim that the policy "learned opponent
+            modeling" or "learned to signal honestly" is, at best, indirect — the eval <em>behavior</em> may show it, but
+            the training <em>signal</em> does not directly reward it. The single highest-value change to this project is a
+            trajectory-level return (e.g. discounted episode return or GAE) so trust and signaling actually enter the
+            objective.</li>
+        <li><strong>Small, high-variance eval.</strong> Three seeds per pool, with within-pool spreads larger than the
+            between-policy deltas. Only the deceptive result survives a per-seed check; the rest are directional. A
+            credible version reports ≥10–20 paired seeds with mean ± std and a paired test (e.g. Wilcoxon signed-rank)
+            per pool, and a single high-variance seed is not allowed to set a headline.</li>
+        <li><strong>The baseline is the teacher's continuation policy.</strong> The SFT teacher scores candidates by
+            rolling out the <em>same</em> heuristic the eval uses as the baseline. So "GRPO beats heuristic" means "the
+            model improved over the policy embedded in its own labels" — a legitimate and even nice result, but not a
+            comparison against an independent oracle.</li>
+        <li><strong>Cross-pool reward is not comparable.</strong> Different pools have different opponent structure and
+            payoff exposure; absolute episode reward across pools shouldn't be compared on one axis. Only within-pool
+            heuristic-vs-GRPO deltas are meaningful.</li>
+    </ul>
+    <p>
+        None of these sink the project — they scope it. SpeedRun is a genuinely rich environment with one clean,
+        seed-robust positive result and a clear, honest path to a stronger one.
+    </p>
+
+    <hr>
+
+    <h2>Why This Matters Beyond the Hackathon</h2>
+    <p>
+        SpeedRun is a small, reproducible test bed for questions that recur in social-simulation and multi-agent
+        research:
+    </p>
+    <ul>
+        <li><strong>Does RL over text actions learn opponent modeling?</strong> The seed-robust deceptive gap is
+            <em>suggestive</em> — but the myopic objective means the cleaner version of this question is still open, and
+            the environment is built to ask it.</li>
+        <li><strong>Can cheap-talk signals coordinate without binding commitments?</strong> The token economy plus the
+            consistency penalty set up a natural test — but answering it properly needs a reward that sees the signal's
+            downstream effect.</li>
+        <li><strong>How does policy robustness change under macro shocks?</strong> CRISIS states and event cards make the
+            ground truth non-stationary in a way most game-theoretic environments ignore.</li>
+    </ul>
+    <p>
+        As LLMs get deployed to negotiate resources, schedule, and form coalitions, we need benchmarks that stress
+        strategic behavior under private information and adversarial co-players. SpeedRun is a small step toward that —
+        and, I hope, an example of reporting such results with the error bars attached.
+    </p>
+
+    <hr>
+
+    <h2>Future Work</h2>
+    <ol>
+        <li><strong>Trajectory-level reward.</strong> Replace the single-step reward with a discounted episode return (or
+            GAE over the rollout). This is the change that would let trust, reputation, and honest signaling actually
+            enter the gradient — and would turn the cheap-talk channel from a shaping term into a learned strategy.</li>
+        <li><strong>More seeds and significance testing.</strong> Re-run eval at ≥20 paired seeds per pool, report mean ±
+            std and a paired Wilcoxon test, and let only seed-robust separations (currently: deceptive) carry
+            headlines.</li>
+        <li><strong>Opponent-modeling head.</strong> A lightweight auxiliary objective predicting opponent type from
+            observation history, trained jointly and fed back as a soft prior over the next action.</li>
+        <li><strong>LLM opponents and longer horizons.</strong> Replace scripted agents with fine-tuned models and push T
+            from 20 → 100. True self-play in a hidden-motive society, with reputation and reciprocity given room to
+            emerge, is where deceptive equilibria no hand-coded opponent can express would show up.</li>
+    </ol>
+    <p>
+        The environment, trained adapters, and full source are open on the Hub. If you want to run your own agent against
+        the Chameleon, the OpenEnv server is one <code>make serve</code> away.
+    </p>
+
+    <script>
+        // Theme toggle functionality
+        function toggleDarkMode() {
+            document.body.classList.toggle('dark-mode');
+            const isDarkMode = document.body.classList.contains('dark-mode');
+            localStorage.setItem('darkMode', isDarkMode ? 'enabled' : 'disabled');
+
+            const themeIcon = document.getElementById('themeIcon');
+            if (isDarkMode) {
+                themeIcon.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 2.25a.75.75 0 01.75.75v2.25a.75.75 0 01-1.5 0V3a.75.75 0 01.75-.75zM7.5 12a4.5 4.5 0 119 0 4.5 4.5 0 01-9 0zM18.894 6.166a.75.75 0 00-1.06-1.06l-1.591 1.59a.75.75 0 101.06 1.061l1.591-1.59zM21.75 12a.75.75 0 01-.75.75h-2.25a.75.75 0 010-1.5h2.25a.75.75 0 01.75.75zM17.834 18.894a.75.75 0 001.06-1.06l-1.59-1.591a.75.75 0 10-1.061 1.06l1.59 1.591zM12 18a.75.75 0 01.75.75v2.25a.75.75 0 01-1.5 0V18.75a.75.75 0 01.75-.75zM7.166 17.834a.75.75 0 00-1.06 1.06l1.59 1.591a.75.75 0 101.061-1.06l-1.59-1.591zM6.25 12a.75.75 0 01-.75.75H3a.75.75 0 010-1.5h2.5a.75.75 0 01.75.75zM6.166 7.166a.75.75 0 00-1.06 1.06l1.591 1.59a.75.75 0 101.06-1.061l-1.591-1.59z"/>
+                    </svg>`;
+            } else {
+                themeIcon.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M21.752 15.002A9.718 9.718 0 0112 21.75a9.75 9.75 0 01-8.485-14.68.75.75 0 011.235-.16 7.5 7.5 0 0010.34 10.34.75.75 0 01.16 1.235z" />
+                    </svg>`;
+            }
+        }
+
+        document.getElementById('toggleTheme').addEventListener('click', toggleDarkMode);
+
+        window.onload = function () {
+            const darkMode = localStorage.getItem('darkMode');
+            if (darkMode === 'enabled') {
+                toggleDarkMode();
+                toggleDarkMode();
+            } else {
+                const themeIcon = document.getElementById('themeIcon');
+                themeIcon.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M21.752 15.002A9.718 9.718 0 0112 21.75a9.75 9.75 0 01-8.485-14.68.75.75 0 011.235-.16 7.5 7.5 0 0010.34 10.34.75.75 0 01.16 1.235z" />
+                    </svg>`;
+            }
+        };
+    </script>
+</body>
+
+</html>
