@@ -4,7 +4,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>From 9.6 to 307 tokens a second: an LLM inference engine from scratch</title>
+  <title>Shipping tokens to you, quicker: an LLM inference engine from scratch</title>
   <meta name="description" content="A Qwen3-0.6B inference server built from first principles: a hand-written decoder, a preallocated KV cache, continuous batching and SSE streaming, 32x faster than the naive loop.">
   <link rel="icon" href="../favicon.png" type="image/png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -238,8 +238,8 @@
       <div class="m-post-body">
         <div class="m-article">
           <p class="m-eyebrow"><time datetime="2026-11-09">Nov 2026</time> · 20 min read</p>
-          <h1>From 9.6 to 307 tokens a second</h1>
-          <p class="m-dek">An LLM inference engine from scratch: Qwen3-0.6B on an Apple M5, in fp16</p>
+          <h1>Shipping tokens to you, quicker</h1>
+          <p class="m-dek">An LLM inference engine from scratch, and how it went from 9.6 to 307 tokens a second on an Apple M5</p>
           <div class="m-prose ie">
 <header id="overview">
       <p class="lede">An LLM server built from first principles in about 1,100 lines of Python: a hand-written Qwen3 decoder, a preallocated KV cache, continuous batching, and a FastAPI front end that streams tokens over Server-Sent Events. Same model, same laptop, 32× the throughput.</p>
