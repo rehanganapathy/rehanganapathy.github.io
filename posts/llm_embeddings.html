@@ -10,214 +10,40 @@
 
   <!-- MathJax for equations -->
   <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
-
-  <style>
-    :root {
-      --bg: #0b0c10;
-      --panel: #12131a;
-      --ink: #e8ecf1;
-      --muted: #a8b3c7;
-      --accent: #67e8f9;
-      --accent-2: #a78bfa;
-      --code-bg: #0f172a;
-      --border: #1f2430;
-      --green: #34d399;
-      --orange: #fb923c;
-      --red: #f87171;
-    }
-
-    html,
-    body {
-      height: 100%;
-    }
-
-    body {
-      margin: 0;
-      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica Neue, Arial, "Apple Color Emoji", "Segoe UI Emoji";
-      color: var(--ink);
-      background: linear-gradient(180deg, #0b0c10, #0b0c10 200px, #0b0c10 100%);
-      line-height: 1.6;
-    }
-
-    .wrap {
-      display: grid;
-      grid-template-columns: 280px 1fr;
-      gap: 24px;
-      max-width: 1300px;
-      margin: 0 auto;
-      padding: 24px;
-    }
-
-    nav {
-      position: sticky;
-      top: 16px;
-      align-self: start;
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 16px;
-      height: fit-content;
-    }
-
-    nav h2 {
-      font-size: 14px;
-      letter-spacing: .08em;
-      text-transform: uppercase;
-      color: var(--muted);
-      margin: 0 0 10px;
-    }
-
-    nav a {
-      color: var(--muted);
-      text-decoration: none;
-      display: block;
-      padding: 6px 8px;
-      border-radius: 8px;
-    }
-
-    nav a:hover {
-      color: var(--ink);
-      background: rgba(103, 232, 249, .08);
-    }
-
-    nav .sub {
-      padding-left: 10px;
-      font-size: 14px;
-    }
-
-    main {
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 28px 28px 80px;
-    }
-
-    header h1 {
-      margin: 0;
-      font-size: 34px;
-      letter-spacing: .3px;
-    }
-
-    header .meta {
-      color: var(--muted);
-      font-size: 14px;
-    }
-
-    h2 {
-      margin-top: 40px;
-      font-size: 26px;
-      border-left: 4px solid var(--accent);
-      padding-left: 10px;
-    }
-
-    h3 {
-      margin-top: 28px;
-      font-size: 20px;
-      color: var(--accent);
-    }
-
-    h4 {
-      margin-top: 20px;
-      font-size: 16px;
-      color: var(--accent-2);
-    }
-
-    p,
-    li {
-      color: #e2e8f0;
-    }
-
-    code.inline {
-      background: rgba(167, 139, 250, .12);
-      border: 1px solid var(--border);
-      padding: 2px 6px;
-      border-radius: 6px;
-    }
-
-    pre {
-      background: var(--code-bg);
-      color: #e5e7eb;
-      padding: 14px 16px;
-      border-radius: 12px;
-      overflow: auto;
-      border: 1px solid var(--border);
-    }
-
-    pre code {
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-      font-size: 13px;
-    }
-
-    .diagram {
-      background: #0b1220;
-    }
-
-    .callout {
-      border-left: 3px solid var(--accent-2);
-      background: rgba(167, 139, 250, .08);
-      padding: 12px 14px;
-      border-radius: 8px;
-    }
-
-    .kpi {
-      display: flex;
-      gap: 16px;
-      flex-wrap: wrap;
-      margin: 6px 0 0;
-    }
-
-    .kpi .pill {
-      background: rgba(103, 232, 249, .08);
-      border: 1px solid var(--border);
-      padding: 8px 10px;
-      border-radius: 12px;
-      font-size: 13px;
-      color: var(--muted)
-    }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin: 14px 0;
-      font-size: 14px;
-    }
-
-    table th,
-    table td {
-      border: 1px solid var(--border);
-      padding: 8px 10px;
-    }
-
-    table th {
-      background: rgba(103, 232, 249, .06);
-      text-align: left;
-    }
-
-    footer {
-      margin-top: 46px;
-      color: var(--muted);
-      font-size: 14px;
-    }
-
-    a {
-      color: var(--accent);
-    }
-
-    .tag {
-      display: inline-block;
-      padding: 2px 8px;
-      border: 1px solid var(--border);
-      background: rgba(52, 211, 153, .08);
-      color: var(--green);
-      border-radius: 999px;
-      font-size: 12px;
-      margin-right: 6px;
-    }
-  </style>
+  <link rel="icon" href="../favicon.png" type="image/png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+  <link rel="stylesheet" href="../assets/retro.css">
 </head>
 
 <body>
-  <div class="wrap">
+<div class="m-desk m-page">
+  <header class="m-menubar">
+    <a href="/" aria-label="Home"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" shape-rendering="crispEdges"><path d="M8 1 L15 8 L8 15 L1 8 Z" fill="#000"></path><path d="M8 5 L11 8 L8 11 L5 8 Z" fill="#fff"></path></svg></a>
+    <a href="/#posts">Posts</a>
+    <a href="/#about">About</a>
+    <a href="https://github.com/rehanganapathy" class="m-hide-sm">GitHub</a>
+    <a href="https://www.linkedin.com/in/rehanganapathy/" class="m-hide-sm">LinkedIn</a>
+    <span class="m-menubar__clock m-hide-sm" data-clock>Mon 9:00 AM</span>
+  </header>
+
+  <main class="m-post-wrap">
+    <article class="m-win">
+      <div class="m-titlebar">
+        <a href="/" class="m-box m-box--close" aria-label="Close and go back to all posts"></a>
+        <span class="m-titlebar__title">llm_embeddings.txt</span>
+      </div>
+      <div class="m-infobar">
+        <span>Essay</span>
+        <span>Aug 2025</span>
+      </div>
+      <div class="m-post-body">
+        <div class="m-article">
+          <p class="m-eyebrow"><time datetime="2025-08-31">Aug 2025</time> · 9 min read</p>
+          <h1>Embeddings for Text: Foundations, Methods, and Applications</h1>
+          <div class="m-prose">
+<div class="wrap">
     <nav>
       <h2>Contents</h2>
       <a href="#abstract">Abstract</a>
@@ -239,9 +65,8 @@
       <a href="#conclusion">6. Conclusion</a>
     </nav>
 
-    <main>
+    <div class="m-main">
       <header>
-        <h1>Embeddings for Text: Foundations, Methods, and Applications</h1>
         <p class="meta">Author: <strong>Rehan Ganapathy</strong> · Date: <time datetime="2025-09-01">September 1,
             2025</time></p>
       </header>
@@ -619,8 +444,24 @@ print_tokens_and_embeddings("HTML coders are not considered programmers")
         <p>© 2025 Rehan Ganapathy. This document is self‑contained HTML. Math rendered with MathJax. Code blocks are
           Python examples; some require large pretrained models that must be downloaded separately.</p>
       </footer>
-    </main>
+    </div>
   </div>
+          </div>
+          <nav class="m-postnav" aria-label="Post navigation">
+            <a href="/" class="m-btn">All posts</a>
+            <a href="/posts/vae.html" class="m-btn m-btn--default">Next: Variational Autoencoders</a>
+          </nav>
+        </div>
+        <div class="m-scroll" aria-hidden="true">
+          <div class="m-scroll__arrow"><svg width="10" height="8" viewBox="0 0 10 8"><path d="M5 1 L9 7 H1 Z" fill="none" stroke="#000"></path></svg></div>
+          <div class="m-scroll__track m-desk"><div class="m-scroll__thumb" style="top:0"></div></div>
+          <div class="m-scroll__arrow"><svg width="10" height="8" viewBox="0 0 10 8"><path d="M5 7 L9 1 H1 Z" fill="none" stroke="#000"></path></svg></div>
+        </div>
+      </div>
+    </article>
+  </main>
+</div>
+<script src="../assets/retro.js"></script>
 </body>
 
 </html>

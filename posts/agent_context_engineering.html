@@ -5,120 +5,40 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Beyond Fine-Tuning: A Technical Deep Dive into Agentic Context Engineering (ACE)</title>
-    <style>
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            line-height: 1.6;
-            color: #e4e4e7;
-            background: #09090b;
-            padding: 2rem 1rem;
-        }
-
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-        }
-
-        h1 {
-            font-size: 2.5rem;
-            margin-bottom: 0.5rem;
-            color: #fafafa;
-        }
-
-        h2 {
-            font-size: 1.75rem;
-            margin: 3rem 0 1rem;
-            color: #fafafa;
-            border-bottom: 2px solid #27272a;
-            padding-bottom: 0.5rem;
-        }
-
-        h3 {
-            font-size: 1.25rem;
-            margin: 2rem 0 1rem;
-            color: #fafafa;
-        }
-
-        p {
-            margin-bottom: 1rem;
-            color: #d4d4d8;
-        }
-
-        code {
-            background: #18181b;
-            padding: 0.2rem 0.4rem;
-            border-radius: 4px;
-            font-family: 'Courier New', monospace;
-            font-size: 0.9em;
-            color: #a1a1aa;
-        }
-
-        pre {
-            background: #18181b;
-            padding: 1.5rem;
-            border-radius: 8px;
-            overflow-x: auto;
-            margin: 1.5rem 0;
-            border: 1px solid #27272a;
-        }
-
-        pre code {
-            background: none;
-            padding: 0;
-            color: #e4e4e7;
-        }
-
-        ul,
-        ol {
-            margin: 1rem 0 1rem 2rem;
-        }
-
-        li {
-            margin: 0.5rem 0;
-        }
-
-        .animation-space {
-            background: #18181b;
-            border: 2px dashed #27272a;
-            border-radius: 8px;
-            padding: 3rem;
-            margin: 2rem 0;
-            text-align: center;
-            color: #71717a;
-            min-height: 200px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .note {
-            background: #1e293b;
-            border-left: 4px solid #3b82f6;
-            padding: 1rem;
-            margin: 1.5rem 0;
-            border-radius: 4px;
-        }
-
-        .warning {
-            background: #451a03;
-            border-left: 4px solid #f59e0b;
-            padding: 1rem;
-            margin: 1.5rem 0;
-            border-radius: 4px;
-        }
-    </style>
+  <link rel="icon" href="../favicon.png" type="image/png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+  <link rel="stylesheet" href="../assets/retro.css">
 </head>
 
 <body>
-    <div class="container">
-        <h1>Beyond Fine-Tuning: A Technical Deep Dive into Agentic Context Engineering (ACE)</h1>
+<div class="m-desk m-page">
+  <header class="m-menubar">
+    <a href="/" aria-label="Home"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" shape-rendering="crispEdges"><path d="M8 1 L15 8 L8 15 L1 8 Z" fill="#000"></path><path d="M8 5 L11 8 L8 11 L5 8 Z" fill="#fff"></path></svg></a>
+    <a href="/#posts">Posts</a>
+    <a href="/#about">About</a>
+    <a href="https://github.com/rehanganapathy" class="m-hide-sm">GitHub</a>
+    <a href="https://www.linkedin.com/in/rehanganapathy/" class="m-hide-sm">LinkedIn</a>
+    <span class="m-menubar__clock m-hide-sm" data-clock>Mon 9:00 AM</span>
+  </header>
 
+  <main class="m-post-wrap">
+    <article class="m-win">
+      <div class="m-titlebar">
+        <a href="/" class="m-box m-box--close" aria-label="Close and go back to all posts"></a>
+        <span class="m-titlebar__title">agent_context_engineering.txt</span>
+      </div>
+      <div class="m-infobar">
+        <span>Notes</span>
+        <span>Oct 2025</span>
+      </div>
+      <div class="m-post-body">
+        <div class="m-article">
+          <p class="m-eyebrow"><time datetime="2025-10-12">Oct 2025</time> · 5 min read</p>
+          <h1>Beyond Fine-Tuning: A Technical Deep Dive into Agentic Context Engineering (ACE)</h1>
+          <div class="m-prose">
+<div class="container">
         <p>
             For developers and researchers building sophisticated AI systems, enhancing Large Language Model (LLM)
             performance is the ultimate goal. While fine-tuning has been a go-to method, a more dynamic and
@@ -144,8 +64,7 @@
                 target="_blank">Try the sample code in Colab</a>
         </p>
 
-        <img src="images/context_eng.png" alt="How Context Engineering Works"
-            style="width: 100%; max-width: 600px; height: auto; margin: 2rem auto; display: block; border-radius: 8px; border: 1px solid #27272a;">
+        <img src="images/context_eng.png" alt="How Context Engineering Works">
 
         <h2>The Core Problem: Brevity Bias and Context Collapse</h2>
 
@@ -175,8 +94,7 @@
             than the baseline accuracy of 63.7% achieved with no adaptation at all.
         </p>
 
-        <img src="images/context_collapse.png" alt="Context Collapse Phenomenon"
-            style="width: 100%; max-width: 600px; height: auto; margin: 2rem auto; display: block; border-radius: 8px; border: 1px solid #27272a;">
+        <img src="images/context_collapse.png" alt="Context Collapse Phenomenon">
 
         <h2>The ACE Architecture: A Modular, Agentic Workflow</h2>
 
@@ -186,8 +104,7 @@
             multi-agent architecture with a clear division of labor:
         </p>
 
-        <img src="images/ace_arch.png" alt="ACE Architecture Diagram"
-            style="width: 100%; max-width: 700px; height: auto; margin: 2rem auto; display: block; border-radius: 8px; border: 1px solid #27272a;">
+        <img src="images/ace_arch.png" alt="ACE Architecture Diagram">
 
         <p>
             <strong>The Generator:</strong> This LLM agent is the primary problem-solver. It takes a new query and the
@@ -317,6 +234,22 @@
             for the next generation of self-improving AI.
         </p>
     </div>
+          </div>
+          <nav class="m-postnav" aria-label="Post navigation">
+            <a href="/" class="m-btn">All posts</a>
+            <a href="/posts/rl_information_bottleneck.html" class="m-btn m-btn--default">Next: Why Reinforcement Learning Is So Hard</a>
+          </nav>
+        </div>
+        <div class="m-scroll" aria-hidden="true">
+          <div class="m-scroll__arrow"><svg width="10" height="8" viewBox="0 0 10 8"><path d="M5 1 L9 7 H1 Z" fill="none" stroke="#000"></path></svg></div>
+          <div class="m-scroll__track m-desk"><div class="m-scroll__thumb" style="top:0"></div></div>
+          <div class="m-scroll__arrow"><svg width="10" height="8" viewBox="0 0 10 8"><path d="M5 7 L9 1 H1 Z" fill="none" stroke="#000"></path></svg></div>
+        </div>
+      </div>
+    </article>
+  </main>
+</div>
+<script src="../assets/retro.js"></script>
 </body>
 
 </html>

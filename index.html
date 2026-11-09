@@ -2,597 +2,171 @@
 <html lang="en">
 
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Rehan Ganapathy – Blog</title>
-  <link rel="icon" href="favicon.png" type="image/x-icon" />
-  <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-
-    :root {
-      --bg-primary: #ffffff;
-      --bg-secondary: #f5f5f7;
-      --bg-card: #ffffff;
-      --text-primary: #1d1d1f;
-      --text-secondary: #6e6e73;
-      --text-tertiary: #86868b;
-      --border: rgba(0, 0, 0, 0.08);
-      --accent: #0071e3;
-      --accent-hover: #0077ed;
-      --shadow: rgba(0, 0, 0, 0.08);
-    }
-
-    .dark-mode {
-      --bg-primary: #000000;
-      --bg-secondary: #0a0a0a;
-      --bg-card: #161616;
-      --text-primary: #f5f5f7;
-      --text-secondary: #a1a1a6;
-      --text-tertiary: #6e6e73;
-      --border: rgba(255, 255, 255, 0.1);
-      --accent: #2997ff;
-      --accent-hover: #409eff;
-      --shadow: rgba(255, 255, 255, 0.05);
-    }
-
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
-      background: var(--bg-primary);
-      color: var(--text-primary);
-      line-height: 1.6;
-      transition: background-color 0.4s cubic-bezier(0.4, 0, 0.2, 1), color 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-      -webkit-font-smoothing: antialiased;
-      -moz-osx-font-smoothing: grayscale;
-      position: relative;
-      overflow-x: hidden;
-    }
-
-    /* Astronomical Background with Shooting Stars */
-    .stars-container {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      pointer-events: none;
-      z-index: 0;
-      overflow: hidden;
-      background: radial-gradient(ellipse at bottom, #1B2735 0%, #090A0F 100%);
-      opacity: 0.15;
-    }
-
-    .dark-mode .stars-container {
-      opacity: 0.6;
-    }
-
-    /* Static starfield */
-    .star {
-      position: absolute;
-      width: 1px;
-      height: 1px;
-      background: white;
-      border-radius: 50%;
-      animation: twinkle 3s infinite;
-    }
-
-    @keyframes twinkle {
-
-      0%,
-      100% {
-        opacity: 0.3;
-      }
-
-      50% {
-        opacity: 1;
-      }
-    }
-
-    /* Larger accent stars */
-    .star.large {
-      width: 2px;
-      height: 2px;
-      box-shadow: 0 0 4px 1px rgba(255, 255, 255, 0.5);
-    }
-
-    .star.xlarge {
-      width: 3px;
-      height: 3px;
-      box-shadow: 0 0 6px 2px rgba(255, 255, 255, 0.6);
-      animation: twinkle 2s infinite;
-    }
-
-    .container {
-      max-width: 980px;
-      margin: 0 auto;
-      padding: 0 22px;
-      position: relative;
-      z-index: 1;
-    }
-
-    /* Header */
-    header {
-      padding: 60px 0 40px;
-      animation: fadeInDown 0.8s cubic-bezier(0.4, 0, 0.2, 1);
-    }
-
-    .header-top {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 12px;
-    }
-
-    .tagline {
-      font-size: 13px;
-      font-weight: 500;
-      letter-spacing: 0.8px;
-      text-transform: uppercase;
-      color: var(--text-tertiary);
-      opacity: 0;
-      animation: fadeIn 0.8s cubic-bezier(0.4, 0, 0.2, 1) 0.2s forwards;
-      position: relative;
-      padding: 12px 24px;
-      background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.05));
-      backdrop-filter: blur(10px);
-      -webkit-backdrop-filter: blur(10px);
-      border-radius: 20px;
-      border: 1px solid rgba(255, 255, 255, 0.18);
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-      overflow: hidden;
-    }
-
-    .dark-mode .tagline {
-      background: linear-gradient(135deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-    }
-
-    .tagline::before {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: -100%;
-      width: 100%;
-      height: 100%;
-      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
-      animation: shimmer 3s infinite;
-    }
-
-    .tagline::after {
-      content: '';
-      position: absolute;
-      top: -50%;
-      left: -50%;
-      width: 200%;
-      height: 200%;
-      background: radial-gradient(circle, rgba(255, 255, 255, 0.1) 0%, transparent 70%);
-      animation: liquidMove 8s ease-in-out infinite;
-    }
-
-    @keyframes shimmer {
-      0% {
-        left: -100%;
-      }
-
-      100% {
-        left: 100%;
-      }
-    }
-
-    @keyframes liquidMove {
-
-      0%,
-      100% {
-        transform: translate(0, 0) scale(1);
-      }
-
-      33% {
-        transform: translate(30%, 20%) scale(1.1);
-      }
-
-      66% {
-        transform: translate(-20%, 30%) scale(0.9);
-      }
-    }
-
-    .theme-toggle {
-      width: 40px;
-      height: 40px;
-      border-radius: 50%;
-      border: none;
-      background: var(--bg-card);
-      color: var(--text-primary);
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-      box-shadow: 0 2px 8px var(--shadow);
-    }
-
-    .theme-toggle:hover {
-      transform: scale(1.05);
-      box-shadow: 0 4px 12px var(--shadow);
-    }
-
-    .theme-toggle:active {
-      transform: scale(0.95);
-    }
-
-    .theme-icon {
-      width: 20px;
-      height: 20px;
-      transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-    }
-
-    h1 {
-      font-size: 56px;
-      font-weight: 700;
-      letter-spacing: -0.02em;
-      margin-bottom: 8px;
-      background: linear-gradient(135deg, var(--text-primary) 0%, var(--text-secondary) 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-      opacity: 0;
-      animation: fadeInUp 0.8s cubic-bezier(0.4, 0, 0.2, 1) 0.3s forwards;
-    }
-
-    .subtitle {
-      font-size: 21px;
-      color: var(--text-secondary);
-      font-weight: 400;
-      opacity: 0;
-      animation: fadeInUp 0.8s cubic-bezier(0.4, 0, 0.2, 1) 0.4s forwards;
-    }
-
-    /* Main Content */
-    main {
-      padding: 40px 0 60px;
-    }
-
-    .section-title {
-      font-size: 32px;
-      font-weight: 600;
-      letter-spacing: -0.01em;
-      margin-bottom: 32px;
-      color: var(--text-primary);
-      opacity: 0;
-      animation: fadeInUp 0.8s cubic-bezier(0.4, 0, 0.2, 1) 0.5s forwards;
-    }
-
-    .posts-list {
-      list-style: none;
-    }
-
-    .post-item {
-      margin-bottom: 12px;
-      opacity: 0;
-      animation: fadeInUp 0.8s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-    }
-
-    .post-item:nth-child(1) {
-      animation-delay: 0.6s;
-    }
-
-    .post-item:nth-child(2) {
-      animation-delay: 0.65s;
-    }
-
-    .post-item:nth-child(3) {
-      animation-delay: 0.7s;
-    }
-
-    .post-item:nth-child(4) {
-      animation-delay: 0.75s;
-    }
-
-    .post-item:nth-child(5) {
-      animation-delay: 0.8s;
-    }
-
-    .post-item:nth-child(6) {
-      animation-delay: 0.85s;
-    }
-
-    .post-item:nth-child(7) {
-      animation-delay: 0.9s;
-    }
-
-    .post-item:nth-child(8) {
-      animation-delay: 0.95s;
-    }
-
-    .post-item:nth-child(9) {
-      animation-delay: 1s;
-    }
-
-    .post-item:nth-child(10) {
-      animation-delay: 1.05s;
-    }
-
-    .post-link {
-      display: block;
-      padding: 24px 28px;
-      background: var(--bg-card);
-      border-radius: 16px;
-      border: 1px solid var(--border);
-      text-decoration: none;
-      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-      box-shadow: 0 1px 3px var(--shadow);
-    }
-
-    .post-link:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 8px 24px var(--shadow);
-      border-color: var(--accent);
-    }
-
-    .post-title {
-      font-size: 24px;
-      font-weight: 600;
-      letter-spacing: -0.01em;
-      color: var(--text-primary);
-      margin-bottom: 6px;
-      transition: color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    }
-
-    .post-link:hover .post-title {
-      color: var(--accent);
-    }
-
-    .post-date {
-      font-size: 15px;
-      color: var(--text-tertiary);
-      font-weight: 400;
-    }
-
-    /* Footer */
-    footer {
-      padding: 40px 0;
-      text-align: center;
-      color: var(--text-tertiary);
-      font-size: 14px;
-      border-top: 1px solid var(--border);
-      opacity: 0;
-      animation: fadeIn 0.8s cubic-bezier(0.4, 0, 0.2, 1) 1s forwards;
-    }
-
-    /* Animations */
-    @keyframes fadeIn {
-      from {
-        opacity: 0;
-      }
-
-      to {
-        opacity: 1;
-      }
-    }
-
-    @keyframes fadeInDown {
-      from {
-        opacity: 0;
-        transform: translateY(-20px);
-      }
-
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
-    }
-
-    @keyframes fadeInUp {
-      from {
-        opacity: 0;
-        transform: translateY(20px);
-      }
-
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
-    }
-
-    /* Responsive */
-    @media (max-width: 768px) {
-      h1 {
-        font-size: 40px;
-      }
-
-      .subtitle {
-        font-size: 18px;
-      }
-
-      .section-title {
-        font-size: 28px;
-      }
-
-      .post-title {
-        font-size: 20px;
-      }
-
-      .post-link {
-        padding: 20px 24px;
-      }
-    }
-
-    @media (max-width: 480px) {
-      h1 {
-        font-size: 32px;
-      }
-
-      .subtitle {
-        font-size: 16px;
-      }
-
-      .post-link {
-        padding: 18px 20px;
-      }
-    }
-  </style>
+  <meta name="description" content="Rehan Ganapathy's notes on caching, deep learning, agents and reinforcement learning.">
+  <link rel="icon" href="favicon.png" type="image/png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+  <link rel="stylesheet" href="assets/retro.css">
 </head>
 
 <body>
-  <div class="stars-container" id="starsContainer"></div>
+<div class="m-desk m-page">
+  <header class="m-menubar">
+    <a href="/" aria-label="Home"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" shape-rendering="crispEdges"><path d="M8 1 L15 8 L8 15 L1 8 Z" fill="#000"></path><path d="M8 5 L11 8 L8 11 L5 8 Z" fill="#fff"></path></svg></a>
+    <a href="/#posts">Posts</a>
+    <a href="/#about">About</a>
+    <a href="https://github.com/rehanganapathy" class="m-hide-sm">GitHub</a>
+    <a href="https://www.linkedin.com/in/rehanganapathy/" class="m-hide-sm">LinkedIn</a>
+    <span class="m-menubar__clock m-hide-sm" data-clock>Mon 9:00 AM</span>
+  </header>
 
-  <div class="container">
-    <header>
-      <div class="header-top">
-        <div class="tagline">keep thinking.</div>
-        <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
-          <svg class="theme-icon" id="themeIcon" fill="currentColor" viewBox="0 0 24 24">
-            <path
-              d="M21.752 15.002A9.718 9.718 0 0112 21.75a9.75 9.75 0 01-8.485-14.68.75.75 0 011.235-.16 7.5 7.5 0 0010.34 10.34.75.75 0 01.16 1.235z" />
-          </svg>
-        </button>
+  <main class="m-stage">
+    <nav class="m-icons" aria-label="Desktop">
+      <a href="https://github.com/rehanganapathy" class="m-icon">
+        <svg width="44" height="34" viewBox="0 0 44 34" aria-hidden="true" shape-rendering="crispEdges"><path d="M2 6 H17 L20 9 H42 V32 H2 Z" fill="#fff" stroke="#000" stroke-width="2"></path><path d="M2 13 H42" stroke="#000" stroke-width="2"></path></svg>
+        <span>Projects</span>
+      </a>
+      <a href="#about" class="m-icon">
+        <svg width="34" height="40" viewBox="0 0 34 40" aria-hidden="true" shape-rendering="crispEdges"><path d="M3 2 H22 L31 11 V38 H3 Z" fill="#fff" stroke="#000" stroke-width="2"></path><path d="M22 2 V11 H31" fill="none" stroke="#000" stroke-width="2"></path><path d="M8 18 H26 M8 23 H26 M8 28 H20" stroke="#000" stroke-width="2"></path></svg>
+        <span>About.txt</span>
+      </a>
+      <a href="https://1bps.us" class="m-icon">
+        <svg width="34" height="40" viewBox="0 0 34 40" aria-hidden="true" shape-rendering="crispEdges"><path d="M3 2 H22 L31 11 V38 H3 Z" fill="#fff" stroke="#000" stroke-width="2"></path><path d="M22 2 V11 H31" fill="none" stroke="#000" stroke-width="2"></path><circle cx="11" cy="28" r="3" fill="#000"></circle><path d="M9 15 A14 14 0 0 1 24 30 M9 21 A8 8 0 0 1 18 30" fill="none" stroke="#000" stroke-width="2"></path></svg>
+        <span>Podcast</span>
+      </a>
+      <a href="https://www.linkedin.com/in/rehanganapathy/" class="m-icon">
+        <svg width="34" height="40" viewBox="0 0 34 40" aria-hidden="true" shape-rendering="crispEdges"><path d="M3 2 H22 L31 11 V38 H3 Z" fill="#fff" stroke="#000" stroke-width="2"></path><path d="M22 2 V11 H31" fill="none" stroke="#000" stroke-width="2"></path><rect x="8" y="17" width="18" height="15" fill="none" stroke="#000" stroke-width="2"></rect><path d="M12 22 H22 M12 27 H18" stroke="#000" stroke-width="2"></path></svg>
+        <span>LinkedIn</span>
+      </a>
+    </nav>
+
+    <section class="m-win m-win--posts" id="posts" aria-labelledby="posts-title">
+      <div class="m-titlebar">
+        <button type="button" class="m-box m-box--close" aria-label="Close window"></button>
+        <h1 class="m-titlebar__title" id="posts-title">rehan's notes</h1>
+        <button type="button" class="m-box m-box--zoom" aria-label="Zoom window" aria-pressed="false"></button>
       </div>
-      <h1>Hey, I'm Rehan Ganapathy :)</h1>
-      <p class="subtitle">I write about things that interest me.</p>
-    </header>
-
-    <main>
-      <h2 class="section-title">Latest Posts</h2>
-      <ul class="posts-list">
-        <li class="post-item">
-          <a href="/posts/sieve.html" class="post-link">
-            <div class="post-title">Sieve Caching</div>
-            <div class="post-date">April 12, 2025</div>
-          </a>
-        </li>
-        <li class="post-item">
-          <a href="/posts/segacache.html" class="post-link">
-            <div class="post-title">Segment Caching</div>
-            <div class="post-date">May 04, 2025</div>
-          </a>
-        </li>
-        <li class="post-item">
-          <a href="/posts/llm_embeddings.html" class="post-link">
-            <div class="post-title">LLM Embeddings</div>
-            <div class="post-date">Aug 31, 2025</div>
-          </a>
-        </li>
-        <li class="post-item">
-          <a href="/posts/vae.html" class="post-link">
-            <div class="post-title">Variational Autoencoders</div>
-            <div class="post-date">Sep 1, 2025</div>
-          </a>
-        </li>
-        <li class="post-item">
-          <a href="/posts/moe.html" class="post-link">
-            <div class="post-title">Mixture of Experts</div>
-            <div class="post-date">Sep 17, 2025</div>
-          </a>
-        </li>
-        <li class="post-item">
-          <a href="/posts/optimisers.html" class="post-link">
-            <div class="post-title">Optimizers in Deep Learning</div>
-            <div class="post-date">Sep 28, 2025</div>
-          </a>
-        </li>
-        <li class="post-item">
-          <a href="/posts/async-js.html" class="post-link">
-            <div class="post-title">Asynchronous Programming in JavaScript</div>
-            <div class="post-date">Oct 4, 2025</div>
-          </a>
-        </li>
-        <li class="post-item">
-          <a href="/posts/agent_context_engineering.html" class="post-link">
-            <div class="post-title">Agentic Context Engineering</div>
-            <div class="post-date">Oct 12, 2025</div>
-          </a>
-        </li>
-        <li class="post-item">
-          <a href="/posts/rl_information_bottleneck.html" class="post-link">
-            <div class="post-title">Why Reinforcement Learning Is So Hard</div>
-            <div class="post-date">Jan 3, 2026</div>
-          </a>
-        </li>
-        <li class="post-item">
-          <a href="/posts/speedrun.html" class="post-link">
-            <div class="post-title">Teaching an LLM to Lie, Cooperate, and Read the Room</div>
-            <div class="post-date">April 26, 2026</div>
-          </a>
-        </li>
-      </ul>
-    </main>
-
-    <footer>
-      Rehan Ganapathy
-      <div style="margin-top: 10px;">
-        <a href="https://github.com/rehanganapathy" target="_blank"
-          style="margin-right: 15px; text-decoration: none; color: var(--text-secondary);">GitHub</a>
-        <a href="https://linkedin.com/in/rehanganapathy" target="_blank"
-          style="text-decoration: none; color: var(--text-secondary);">LinkedIn</a>
+      <div class="m-infobar">
+        <span>11 items</span>
+        <span class="m-hide-sm">caching, ML &amp; agents</span>
+        <span>keep thinking.</span>
       </div>
-    </footer>
-  </div>
+      <div class="m-hero">
+        <p class="m-eyebrow">Welcome to my desk</p>
+        <h2 class="m-display">Hey, I'm Rehan. I write about things that interest me.</h2>
+        <p class="m-lede">Long-form posts on caching, deep learning, agents and reinforcement learning. Open a file to read it.</p>
+      </div>
+      <div class="m-cols m-list-head" aria-hidden="true">
+        <span></span><span>Name</span><span class="m-meta">Kind</span><span class="m-meta">Date</span>
+      </div>
+      <a href="/posts/inference-engine.html" class="m-row m-cols" aria-current="true">
+        <svg width="18" height="22" viewBox="0 0 18 22" aria-hidden="true"><path d="M2 1 H12 L17 6 V21 H2 Z" fill="none" stroke-width="2"></path></svg>
+        <span>Building an LLM inference engine from scratch</span>
+        <span class="m-meta">Build log</span>
+        <time class="m-meta" datetime="2026-11-09">Nov 2026</time>
+      </a>
+      <a href="/posts/speedrun.html" class="m-row m-cols">
+        <svg width="18" height="22" viewBox="0 0 18 22" aria-hidden="true"><path d="M2 1 H12 L17 6 V21 H2 Z" fill="none" stroke-width="2"></path></svg>
+        <span>Teaching an LLM to Lie, Cooperate, and Read the Room</span>
+        <span class="m-meta">Build log</span>
+        <time class="m-meta" datetime="2026-04-26">Apr 2026</time>
+      </a>
+      <a href="/posts/rl_information_bottleneck.html" class="m-row m-cols">
+        <svg width="18" height="22" viewBox="0 0 18 22" aria-hidden="true"><path d="M2 1 H12 L17 6 V21 H2 Z" fill="none" stroke-width="2"></path></svg>
+        <span>Why Reinforcement Learning Is So Hard</span>
+        <span class="m-meta">Essay</span>
+        <time class="m-meta" datetime="2026-01-03">Jan 2026</time>
+      </a>
+      <a href="/posts/agent_context_engineering.html" class="m-row m-cols">
+        <svg width="18" height="22" viewBox="0 0 18 22" aria-hidden="true"><path d="M2 1 H12 L17 6 V21 H2 Z" fill="none" stroke-width="2"></path></svg>
+        <span>Agentic Context Engineering</span>
+        <span class="m-meta">Notes</span>
+        <time class="m-meta" datetime="2025-10-12">Oct 2025</time>
+      </a>
+      <a href="/posts/async-js.html" class="m-row m-cols">
+        <svg width="18" height="22" viewBox="0 0 18 22" aria-hidden="true"><path d="M2 1 H12 L17 6 V21 H2 Z" fill="none" stroke-width="2"></path></svg>
+        <span>Asynchronous Programming in JavaScript</span>
+        <span class="m-meta">Notes</span>
+        <time class="m-meta" datetime="2025-10-04">Oct 2025</time>
+      </a>
+      <a href="/posts/optimisers.html" class="m-row m-cols">
+        <svg width="18" height="22" viewBox="0 0 18 22" aria-hidden="true"><path d="M2 1 H12 L17 6 V21 H2 Z" fill="none" stroke-width="2"></path></svg>
+        <span>Optimizers in Deep Learning</span>
+        <span class="m-meta">Notes</span>
+        <time class="m-meta" datetime="2025-09-28">Sep 2025</time>
+      </a>
+      <a href="/posts/moe.html" class="m-row m-cols">
+        <svg width="18" height="22" viewBox="0 0 18 22" aria-hidden="true"><path d="M2 1 H12 L17 6 V21 H2 Z" fill="none" stroke-width="2"></path></svg>
+        <span>Mixture of Experts</span>
+        <span class="m-meta">Notes</span>
+        <time class="m-meta" datetime="2025-09-17">Sep 2025</time>
+      </a>
+      <a href="/posts/vae.html" class="m-row m-cols">
+        <svg width="18" height="22" viewBox="0 0 18 22" aria-hidden="true"><path d="M2 1 H12 L17 6 V21 H2 Z" fill="none" stroke-width="2"></path></svg>
+        <span>Variational Autoencoders</span>
+        <span class="m-meta">Notes</span>
+        <time class="m-meta" datetime="2025-09-01">Sep 2025</time>
+      </a>
+      <a href="/posts/llm_embeddings.html" class="m-row m-cols">
+        <svg width="18" height="22" viewBox="0 0 18 22" aria-hidden="true"><path d="M2 1 H12 L17 6 V21 H2 Z" fill="none" stroke-width="2"></path></svg>
+        <span>LLM Embeddings</span>
+        <span class="m-meta">Essay</span>
+        <time class="m-meta" datetime="2025-08-31">Aug 2025</time>
+      </a>
+      <a href="/posts/segacache.html" class="m-row m-cols">
+        <svg width="18" height="22" viewBox="0 0 18 22" aria-hidden="true"><path d="M2 1 H12 L17 6 V21 H2 Z" fill="none" stroke-width="2"></path></svg>
+        <span>Segment Caching</span>
+        <span class="m-meta">Notes</span>
+        <time class="m-meta" datetime="2025-05-04">May 2025</time>
+      </a>
+      <a href="/posts/sieve.html" class="m-row m-cols">
+        <svg width="18" height="22" viewBox="0 0 18 22" aria-hidden="true"><path d="M2 1 H12 L17 6 V21 H2 Z" fill="none" stroke-width="2"></path></svg>
+        <span>Sieve Caching</span>
+        <span class="m-meta">Notes</span>
+        <time class="m-meta" datetime="2025-04-12">Apr 2025</time>
+      </a>
+    </section>
 
-  <script>
-    // Create astronomical background with shooting stars
-    const starsContainer = document.getElementById('starsContainer');
+    <section class="m-win m-win--about" id="about" aria-labelledby="about-title">
+      <div class="m-titlebar">
+        <button type="button" class="m-box m-box--close" aria-label="Close window"></button>
+        <h2 class="m-titlebar__title" id="about-title">About This Blog</h2>
+      </div>
+      <div class="m-about">
+        <div class="m-about__who">
+          <svg width="56" height="56" viewBox="0 0 14 14" aria-hidden="true" shape-rendering="crispEdges"><rect x="0.5" y="0.5" width="13" height="13" fill="#fff" stroke="#000"></rect><rect x="4" y="3" width="6" height="5" fill="#000"></rect><rect x="5" y="5" width="1" height="1" fill="#fff"></rect><rect x="8" y="5" width="1" height="1" fill="#fff"></rect><rect x="3" y="9" width="8" height="4" fill="#000"></rect></svg>
+          <div>
+            <p class="m-about__name">Rehan Ganapathy</p>
+            <p class="m-about__place">Bangalore, India</p>
+          </div>
+        </div>
+        <p class="m-about__bio">Data engineer at Target. Independently, I build ML infrastructure, agentic systems and AI products, and write up what I learn here.</p>
+        <div class="m-about__links">
+          <a href="https://github.com/rehanganapathy" class="m-btn">GitHub</a>
+          <a href="https://www.linkedin.com/in/rehanganapathy/" class="m-btn">LinkedIn</a>
+          <a href="https://1bps.us" class="m-btn">Podcast</a>
+        </div>
+      </div>
+    </section>
 
-    // Create static starfield
-    function createStarfield() {
-      const numberOfStars = 200;
-
-      for (let i = 0; i < numberOfStars; i++) {
-        const star = document.createElement('div');
-        star.className = 'star';
-
-        // Random size categories
-        const rand = Math.random();
-        if (rand > 0.95) {
-          star.classList.add('xlarge');
-        } else if (rand > 0.85) {
-          star.classList.add('large');
-        }
-
-        star.style.left = `${Math.random() * 100}%`;
-        star.style.top = `${Math.random() * 100}%`;
-        star.style.animationDelay = `${Math.random() * 3}s`;
-
-        starsContainer.appendChild(star);
-      }
-    }
-
-    // Initialize starfield
-    createStarfield();
-
-    const themeToggle = document.getElementById('themeToggle');
-    const themeIcon = document.getElementById('themeIcon');
-    const html = document.documentElement;
-
-    // Initialize theme from memory
-    let darkMode = false;
-    const savedTheme = window.darkModePreference;
-    if (savedTheme !== undefined) {
-      darkMode = savedTheme;
-    } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
-      darkMode = true;
-    }
-
-    function updateTheme() {
-      if (darkMode) {
-        document.body.classList.add('dark-mode');
-        themeIcon.innerHTML = '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>';
-      } else {
-        document.body.classList.remove('dark-mode');
-        themeIcon.innerHTML = '<path d="M21.752 15.002A9.718 9.718 0 0112 21.75a9.75 9.75 0 01-8.485-14.68.75.75 0 011.235-.16 7.5 7.5 0 0010.34 10.34.75.75 0 01.16 1.235z" />';
-      }
-      window.darkModePreference = darkMode;
-    }
-
-    themeToggle.addEventListener('click', () => {
-      darkMode = !darkMode;
-      updateTheme();
-    });
-
-    updateTheme();
-  </script>
+    <section class="m-win m-win--note" aria-labelledby="note-title">
+      <div class="m-titlebar">
+        <button type="button" class="m-box m-box--close" aria-label="Close window"></button>
+        <h2 class="m-titlebar__title" id="note-title">Note Pad</h2>
+      </div>
+      <div class="m-note">
+        <h2>Now</h2>
+        <p>Writing an LLM inference engine from scratch, one blog post per component.</p>
+        <p class="m-note__page">1 of 1</p>
+      </div>
+    </section>
+  </main>
+</div>
+<script src="assets/retro.js"></script>
 </body>
 
 </html>

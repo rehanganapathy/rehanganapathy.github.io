@@ -1,0 +1,1168 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>From 9.6 to 307 tokens a second: an LLM inference engine from scratch</title>
+  <meta name="description" content="A Qwen3-0.6B inference server built from first principles: a hand-written decoder, a preallocated KV cache, continuous batching and SSE streaming, 32x faster than the naive loop.">
+  <link rel="icon" href="../favicon.png" type="image/png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+  <link rel="stylesheet" href="../assets/retro.css">
+  <style>
+    /* Inference-engine post: 1-bit versions of the figures, calculator and simulator. */
+    .m-post-wrap--wide { max-width: 1100px; }
+    .ie { --hatch: repeating-linear-gradient(45deg, #000 0 1px, #fff 1px 4px); --dots: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='3' height='3'%3E%3Crect width='1' height='1'/%3E%3C/svg%3E"); }
+    .ie :is(.hero-nums, .flow, .stack, .fig, .panel, .gates, .mock, .legend, .readout, .ctrls, .slots, .qrow, .pair, .tbl) :where(div, svg, p, figure) { margin: 0; }
+    .ie .pair > figure { margin: 0; }
+    .ie section { scroll-margin-top: 40px; }
+    .ie .lede { font-size: 17px; line-height: 1.6; }
+    .ie .repo-link a { font-family: var(--m-font-chrome); font-size: 17px; }
+    .ie nav.toc { max-width: none; }
+    .ie nav.toc ul { columns: 2; column-gap: 0; padding: 4px 0; }
+    .ie nav.toc li { break-inside: avoid; }
+    .ie nav.toc a:last-child { padding-bottom: 4px; }
+    .ie .caption, .ie .fig-sub, .ie figcaption { font: var(--m-text-sm)/1.55 var(--m-font-text); text-align: left; max-width: 75ch; }
+    .ie figcaption::before { content: none; }
+    .ie figure { margin-bottom: 28px; }
+    .ie figcaption { margin-top: 10px; }
+    .ie .ref { display: block; margin: -12px 0 24px; font: 12px var(--m-font-text); }
+    .ie pre .k { font-weight: 600; }
+    .ie pre .c { font-style: italic; }
+    .ie .pull { margin: 8px 0 24px; padding: 16px 20px; border: 3px double #000; font: 600 21px/1.35 var(--m-font-chrome); max-width: 40ch; text-wrap: balance; }
+    .ie .note { font-size: 14px; }
+
+    /* glyphs: naive dashed, static thin + hollow marker, continuous heavy + filled marker */
+    .ie .g { display: inline-block; width: 24px; height: 10px; background-repeat: no-repeat; background-position: center; flex: none; vertical-align: middle; }
+    .ie .g-naive { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='10'%3E%3Cpath d='M0 5H24' stroke='black' stroke-width='2' stroke-dasharray='5 3'/%3E%3C/svg%3E"); }
+    .ie .g-static { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='10'%3E%3Cpath d='M0 5H24' stroke='black' stroke-width='1.5'/%3E%3Ccircle cx='12' cy='5' r='3.5' fill='white' stroke='black' stroke-width='1.5'/%3E%3C/svg%3E"); }
+    .ie .g-continuous { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='10'%3E%3Cpath d='M0 5H24' stroke='black' stroke-width='3'/%3E%3Ccircle cx='12' cy='5' r='4' fill='black'/%3E%3C/svg%3E"); }
+    .ie .sw.g { margin-right: 8px; }
+    .ie .cellk { display: inline-block; width: 12px; height: 12px; border: 1px solid #000; background: #fff; flex: none; }
+    .ie .k-solid { background: #000; }
+    .ie .k-hatch { background: var(--hatch); }
+    .ie .k-dots { background: var(--dots); }
+    .ie .k-dashed { border-style: dashed; }
+
+    /* hero numbers */
+    .ie .hero-nums { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 28px 0 12px; border: 1px solid #000; box-shadow: var(--m-shadow); }
+    .ie .hero-nums > div { padding: 16px 18px; border-left: 1px solid #000; min-width: 0; }
+    .ie .hero-nums > div:first-child { border-left: 0; }
+    .ie .hero-nums .k { font: 500 11px/1.3 var(--m-font-text); letter-spacing: .06em; text-transform: uppercase; display: flex; align-items: center; gap: 8px; }
+    .ie .hero-nums .v { font: 600 40px/1.1 var(--m-font-chrome); margin-top: 8px; font-variant-numeric: tabular-nums; }
+    .ie .hero-nums .v small { font: 13px var(--m-font-text); margin-left: 4px; }
+    .ie .hero-nums .d { font-size: 13px; line-height: 1.5; margin-top: 4px; }
+
+    /* tables */
+    .ie .tbl { margin-bottom: 20px; }
+    .ie .tbl table { margin: 0; }
+    .ie :is(td, th).num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .ie th.num { border-right-color: #fff; }
+    .ie td .inbar { display: inline-block; height: 9px; background: #000; vertical-align: 0; margin-right: 8px; border: 1px solid #000; }
+    .ie td .inbar--ref { background: var(--hatch); }
+    .ie tr.hl td { font-weight: 600; border-top: 3px double #000; border-bottom: 3px double #000; }
+    .ie td a { text-decoration: none; }
+    .ie td a:hover code, .ie td a:focus-visible code { background: #000; color: #fff; }
+
+    /* request lifecycle list */
+    .ie .flow { margin: 8px 0 24px; counter-reset: f; border-top: 1px solid #000; }
+    .ie .flow .st { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; gap: 14px; align-items: start; padding: 12px 0; border-bottom: 1px dotted #000; }
+    .ie .flow .n { counter-increment: f; width: 26px; height: 26px; border: 1px solid #000; display: grid; place-items: center; font: 600 12px var(--m-font-text); box-shadow: 2px 2px 0 #000; }
+    .ie .flow .n::before { content: counter(f); }
+    .ie .flow .t { font-family: var(--m-font-chrome); font-weight: 600; font-size: 17px; }
+    .ie .flow .dsc { font-size: 14px; line-height: 1.6; }
+    .ie .flow .where { font: 12px/1.4 var(--m-font-text); text-align: right; white-space: nowrap; padding-top: 3px; }
+    .ie .lane { display: inline-block; font: 500 10.5px/1 var(--m-font-text); letter-spacing: .05em; text-transform: uppercase; padding: 3px 6px; margin-left: 8px; vertical-align: 2px; border: 1px solid #000; }
+    .ie .lane.gpu { background: #000; color: #fff; }
+
+    /* decoder stack */
+    .ie .stack { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; margin: 8px 0 24px; }
+    .ie .blk { border: 1px solid #000; box-shadow: var(--m-shadow); padding: 16px; min-width: 0; }
+    .ie .blk h4 { margin: 0 0 12px; font: 600 14px/1 var(--m-font-chrome); }
+    .ie .ops { display: grid; gap: 6px; font: 12.5px/1.35 var(--m-font-text); }
+    .ie .op { border: 1px solid #000; padding: 6px 10px; display: flex; justify-content: space-between; gap: 10px; }
+    .ie .op span:last-child { white-space: nowrap; }
+    .ie .op.res { border-style: dashed; justify-content: center; }
+    .ie .op.hl { border-width: 2px; padding: 5px 9px; font-weight: 600; }
+    .ie .arrow { text-align: center; font-size: 12px; line-height: 1; }
+    .ie .blk .caption { margin-top: 14px !important; }
+
+    /* figures */
+    .ie .fig { border: 1px solid #000; box-shadow: var(--m-shadow); padding: 16px 16px 12px; min-width: 0; }
+    .ie .fig.scroll { overflow-x: auto; }
+    .ie .fig-title { font: 600 16px/1.3 var(--m-font-chrome); margin-bottom: 2px; }
+    .ie .fig-sub { margin-bottom: 10px; }
+    .ie .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12.5px; margin-bottom: 8px; }
+    .ie .legend span { display: inline-flex; align-items: center; gap: 6px; }
+    .ie svg.chart { display: block; width: 100%; height: auto; overflow: visible; }
+    .ie svg.chart text { fill: #000; font: 10.5px var(--m-font-text); }
+    .ie svg.chart text.lbl { font-weight: 600; font-size: 11px; paint-order: stroke; stroke: #fff; stroke-width: 4px; stroke-linejoin: round; }
+    .ie svg.chart .gridl { stroke: #000; stroke-width: 1; stroke-dasharray: 1 3; }
+    .ie svg.chart .axis { stroke: #000; stroke-width: 1; }
+    .ie .pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; margin-bottom: 20px; }
+    .ie .pair .fig { height: 100%; }
+    .tip { position: fixed; pointer-events: none; z-index: 20; background: #000; color: #fff; font: 12px/1.45 var(--m-font-text); padding: 7px 9px; max-width: 260px; border: 1px solid #fff; box-shadow: 2px 2px 0 #000; }
+    .tip b { font-weight: 600; }
+
+    /* hand-drawn diagrams */
+    .ie svg.dg { display: block; width: 100%; height: auto; }
+    .ie svg.dg.wide { min-width: 720px; }
+    .ie .dg rect { rx: 0; ry: 0; }
+    .ie .dg text { fill: #000; font: 11px var(--m-font-text); }
+    .ie .dg text.m { font: 10.5px var(--m-font-text); }
+    .ie .dg text.h { font: 600 12px var(--m-font-chrome); }
+    .ie .dg text.num { font: 600 11px var(--m-font-text); }
+    .ie .dg .lanebg { fill: #fff; stroke: #000; stroke-width: 1; stroke-dasharray: 2 3; }
+    .ie .dg .box { fill: #fff; stroke: #000; stroke-width: 1; }
+    .ie .dg .box.gpu { stroke-width: 3; }
+    .ie .dg .box.cli { fill: #fff; stroke-dasharray: 4 2; }
+    .ie .dg .wire { fill: none; stroke: #000; stroke-width: 1.3; }
+    .ie .dg .wire.dash { stroke-dasharray: 4 4; stroke-width: 2; }
+    .ie .dg .ah, .ie .dg .ah.acc { fill: #000; }
+    .ie .dg .ncirc { fill: #000; stroke: #000; }
+    .ie .dg text.num { fill: #fff; }
+    .ie .dg .c-comp1, .ie .dg .c-comp2, .ie .dg .c-prompt { fill: #000; }
+    .ie .dg .c-redo { fill: url(#p-hatch); stroke: #000; stroke-width: 1; }
+    .ie .dg .c-read { fill: #fff; stroke: #000; stroke-width: 1; }
+    .ie .dg .c-gen { fill: url(#p-dots); stroke: #000; stroke-width: 1; }
+    .ie .dg .c-dead { fill: url(#p-hatch); stroke: #000; stroke-width: .6; }
+    .ie .dg .c-empty { fill: #fff; stroke: #000; stroke-width: .6; stroke-dasharray: 2 2; }
+    .ie .dg .brace { fill: none; stroke: #000; stroke-width: 2; }
+    .ie .dg text.s3 { font-weight: 600; }
+
+    /* calculator + simulator */
+    .ie .panel { border: 1px solid #000; box-shadow: var(--m-shadow); padding: 18px; margin: 6px 0 24px; }
+    .ie .ctrls { display: flex; flex-wrap: wrap; gap: 14px 24px; align-items: end; margin-bottom: 16px; }
+    .ie .ctrl { display: grid; gap: 6px; font-size: 13px; }
+    .ie .ctrl label, .ie .ctrl .lab { font: 600 12px/1 var(--m-font-chrome); }
+    .ie input[type=range] { width: 180px; accent-color: #000; }
+    .ie .seg { display: inline-flex; border: 1px solid #000; border-radius: var(--m-radius-btn); overflow: hidden; }
+    .ie .seg button { border: 0; border-radius: 0; min-height: 36px; padding: 6px 12px; font-size: 14px; }
+    .ie .seg button + button { border-left: 1px solid #000; }
+    .ie .seg button[aria-pressed="true"] { background: #000; color: #fff; }
+    .ie .btn { min-height: 36px; padding: 6px 14px; font-size: 14px; }
+    .ie .btn.primary { outline: 3px solid #000; outline-offset: 2px; }
+    .ie .readout { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 14px; }
+    .ie .readout div { min-width: 0; }
+    .ie .readout .k { font: 500 11px/1.3 var(--m-font-text); letter-spacing: .05em; text-transform: uppercase; }
+    .ie .readout .v { font: 600 24px/1.25 var(--m-font-chrome); font-variant-numeric: tabular-nums; }
+    .ie .readout .v.warn { display: inline-block; background: #000; color: #fff; padding: 0 6px; }
+    .ie .bar-res { height: 14px; border: 1px solid #000; display: flex; margin-top: 14px; background: #fff; }
+    .ie .bar-res i { display: block; height: 100%; background: #000; }
+    .ie .bar-cap { display: flex; justify-content: space-between; font-size: 12px; margin-top: 6px; gap: 8px; flex-wrap: wrap; }
+
+    .ie .slots { display: grid; gap: 6px; margin: 4px 0 14px; }
+    .ie .slot { display: grid; grid-template-columns: 54px minmax(0, 1fr); gap: 10px; align-items: center; font: 12px var(--m-font-text); }
+    .ie .slot .track { height: 30px; border: 1px dashed #000; position: relative; overflow: hidden; }
+    .ie .slot .track.busy { border-style: solid; }
+    .ie .slot .fill { position: absolute; inset: 0 auto 0 0; background: var(--dots); border-right: 1px solid #000; transition: width .08s linear; }
+    .ie .static-mode .slot .fill { background: var(--hatch); }
+    .ie .slot .txt { position: absolute; inset: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 8px; font: 12px var(--m-font-text); gap: 8px; }
+    .ie .slot .txt > span { background: #fff; padding: 0 4px; }
+    .ie .slot .txt .mv { font-weight: 600; }
+    .ie .queue { display: flex; flex-wrap: wrap; gap: 5px; min-height: 26px; }
+    .ie .chip { font: 11.5px/1 var(--m-font-text); border: 1px solid #000; padding: 5px 7px; }
+    .ie .chip.done { text-decoration: line-through; border-style: dashed; }
+    .ie .qrow { display: grid; grid-template-columns: 70px minmax(0, 1fr); gap: 10px; align-items: center; font: 600 12px/1 var(--m-font-chrome); margin-bottom: 8px; }
+    .ie canvas#occ { width: 100%; height: 46px; display: block; margin: 8px 0 0; border-top: 1px solid #000; }
+    .ie .cmp { margin-top: 14px !important; }
+
+    .ie .gates { display: grid; gap: 10px; margin: 6px 0 24px; }
+    .ie .gate { display: grid; grid-template-columns: minmax(0, 270px) minmax(0, 1fr); gap: 16px; padding: 12px 14px; border: 1px solid #000; }
+    .ie .gate code { border: 0; padding: 0; font-size: 12.5px; font-weight: 600; word-break: break-word; }
+    .ie .gate > div { font-size: 14px; line-height: 1.6; }
+
+    /* chat UI sketch */
+    .ie .mock { border: 1px solid #000; box-shadow: var(--m-shadow); max-width: 640px; margin: 6px 0 24px; font-size: 14px; }
+    .ie .mock .bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 6px 12px; border-bottom: 3px double #000; font: 11.5px var(--m-font-text); }
+    .ie .mock .bar b { font: 600 14px var(--m-font-chrome); }
+    .ie .mock .bar .dot { width: 7px; height: 7px; background: #000; display: inline-block; margin-right: 5px; }
+    .ie .mock .body { padding: 14px; display: grid; gap: 12px; line-height: 1.55; }
+    .ie .mock .u { justify-self: start; border: 1px solid #000; padding: 6px 10px; }
+    .ie .mock .who { font: 600 12px var(--m-font-chrome); margin-bottom: 2px !important; }
+    .ie .mock .meta { font: 11.5px var(--m-font-text); margin-top: 4px !important; }
+    .ie .mock .in { display: flex; gap: 8px; padding: 10px 12px; border-top: 1px solid #000; }
+    .ie .mock .in span { flex: 1; border: 1px solid #000; padding: 7px 10px; }
+    .ie .mock .in em { font-style: normal; font-family: var(--m-font-chrome); background: #000; color: #fff; border-radius: var(--m-radius-btn); padding: 7px 14px; }
+    .ie ul.tight li { margin-bottom: 8px; }
+
+    @container (max-width: 900px) {
+      .ie .stack, .ie .pair { grid-template-columns: minmax(0, 1fr); }
+    }
+    @container (max-width: 600px) {
+      .ie nav.toc ul { columns: 1; }
+      .ie .hero-nums { grid-template-columns: minmax(0, 1fr); }
+      .ie .hero-nums > div { border-left: 0; border-top: 1px solid #000; }
+      .ie .hero-nums > div:first-child { border-top: 0; }
+      .ie .flow .st { grid-template-columns: 32px minmax(0, 1fr); }
+      .ie .flow .where { grid-column: 2; text-align: left; white-space: normal; }
+      .ie .gate { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+      .ie .pull { font-size: 18px; }
+    }
+    @media (prefers-reduced-motion: reduce) { .ie .slot .fill { transition: none; } }
+    .ie .tbl { overflow-x: auto; border: 0; }
+    .ie .tbl table { display: table; width: 100%; }
+
+  </style>
+</head>
+
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <pattern id="p-hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="5" height="5" fill="#fff"/><rect width="1.4" height="5" fill="#000"/></pattern>
+    <pattern id="p-dots" width="3" height="3" patternUnits="userSpaceOnUse"><rect width="3" height="3" fill="#fff"/><rect width="1.2" height="1.2" fill="#000"/></pattern>
+  </defs>
+</svg>
+<div class="m-desk m-page">
+  <header class="m-menubar">
+    <a href="/" aria-label="Home"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" shape-rendering="crispEdges"><path d="M8 1 L15 8 L8 15 L1 8 Z" fill="#000"></path><path d="M8 5 L11 8 L8 11 L5 8 Z" fill="#fff"></path></svg></a>
+    <a href="/#posts">Posts</a>
+    <a href="/#about">About</a>
+    <a href="https://github.com/rehanganapathy" class="m-hide-sm">GitHub</a>
+    <a href="https://www.linkedin.com/in/rehanganapathy/" class="m-hide-sm">LinkedIn</a>
+    <span class="m-menubar__clock m-hide-sm" data-clock>Mon 9:00 AM</span>
+  </header>
+
+  <main class="m-post-wrap m-post-wrap--wide">
+    <article class="m-win">
+      <div class="m-titlebar">
+        <a href="/" class="m-box m-box--close" aria-label="Close and go back to all posts"></a>
+        <span class="m-titlebar__title">inference-engine.txt</span>
+      </div>
+      <div class="m-infobar">
+        <span>Build log</span>
+        <span>Nov 2026</span>
+      </div>
+      <div class="m-post-body">
+        <div class="m-article">
+          <p class="m-eyebrow"><time datetime="2026-11-09">Nov 2026</time> · 20 min read</p>
+          <h1>From 9.6 to 307 tokens a second</h1>
+          <p class="m-dek">An LLM inference engine from scratch: Qwen3-0.6B on an Apple M5, in fp16</p>
+          <div class="m-prose ie">
+<header id="overview">
+      <p class="lede">An LLM server built from first principles in about 1,100 lines of Python: a hand-written Qwen3 decoder, a preallocated KV cache, continuous batching, and a FastAPI front end that streams tokens over Server-Sent Events. Same model, same laptop, 32× the throughput.</p>
+      <p class="repo-link"><a href="https://github.com/rehanganapathy/inferenece-from-scratch">View the code on GitHub →</a></p>
+      <nav class="toc" aria-label="Contents">
+        <ul>
+          <li><a href="#naive">Why the first version is slow</a></li>
+          <li><a href="#model">The model, by hand</a></li>
+          <li><a href="#cache">KV cache: a pool of slots</a></li>
+          <li><a href="#scheduler">Scheduling: static vs continuous</a></li>
+          <li><a href="#lifecycle">Life of a request</a></li>
+          <li><a href="#precision">The fp32 default</a></li>
+          <li><a href="#bench">Benchmarks</a></li>
+          <li><a href="#run">Run it</a></li>
+          <li><a href="#tests">Correctness gates</a></li>
+          <li><a href="#edges">What comes next</a></li>
+          <li><a href="#map">Repo map</a></li>
+        </ul>
+      </nav>
+
+      <p>There is no inference library under this. Every speedup on this page comes from one idea at a time, each fixing the bottleneck the previous version exposed. The naive loop recomputes the whole conversation for every new token. A KV cache stops that. Batching shares each forward pass across many requests. Continuous batching keeps that batch full when requests finish at different times. One more change, switching the Mac default from fp32 to fp16, nearly doubled everything again.</p>
+
+      <div class="hero-nums" role="list">
+        <div role="listitem">
+          <div class="k"><i class="g g-naive"></i>Naive, no cache</div>
+          <div class="v">9.6<small>tok/s</small></div>
+          <div class="d">one request at a time, full prefix recomputed every token</div>
+        </div>
+        <div role="listitem">
+          <div class="k"><i class="g g-static"></i>KV cache, static batch</div>
+          <div class="v">236<small>tok/s</small></div>
+          <div class="d">32 slots, refilled only when the whole batch drains</div>
+        </div>
+        <div role="listitem">
+          <div class="k"><i class="g g-continuous"></i>Continuous batching</div>
+          <div class="v">307<small>tok/s</small></div>
+          <div class="d">32 slots, requests join and leave on every step</div>
+        </div>
+      </div>
+      <p class="caption">Output tokens per second on a mixed trace of 64 requests at concurrency 32 (naive: 12 requests, which it serves one at a time). Measured with <a href="https://github.com/rehanganapathy/inferenece-from-scratch/blob/HEAD/bench/harness.py"><code>bench/harness.py</code></a> on an Apple M5 through PyTorch's MPS backend in fp16, 9 November 2026.</p>
+    </header>
+
+    <section id="naive">
+      <h2>Why the first version is slow</h2>
+      <p>A language model produces one token per forward pass. To pick token <em>n</em>, attention needs keys and values for every token before it. The simplest loop feeds the whole sequence back in each time: prompt plus everything generated so far. It is correct, and it is the reference every faster version is tested against. It also does the same work over and over.</p>
+
+      <figure>
+        <div class="fig">
+          <div class="fig-title">Work per step: recompute everything, or compute one new position</div>
+          <div class="fig-sub">A 4-token prompt generating 5 tokens. Each row is one forward pass; each cell is one token position.</div>
+          <div class="legend">
+            <span><i class="cellk k-solid"></i>computed this step</span>
+            <span><i class="cellk k-hatch"></i>recomputed, same result as last step</span>
+            <span><i class="cellk k-outline"></i>read from the KV cache</span>
+          </div>
+          <svg class="dg" id="dg-work" viewBox="0 0 680 196" role="img" aria-label="Naive decoding recomputes all positions every step, 30 position-passes for 5 tokens; cached decoding computes one new position per step, 8 position-passes."></svg>
+        </div>
+        <figcaption>Over this tiny generation the naive loop pushes 30 positions through the model; the cached one pushes 8. The gap grows with length: naive work per token is linear in the sequence length, so a whole generation is quadratic.</figcaption>
+      </figure>
+
+      <p>The benchmark below measures exactly that, one request at a time, as the prompt grows. Naive decode speed falls off a cliff. With the cache it barely moves, because each step still processes one position. Only the attention read gets longer.</p>
+
+      <figure>
+        <div class="fig">
+          <div class="fig-title">Decode speed vs context length</div>
+          <div class="fig-sub">Single request, decode tokens/s after the first token, 32 new tokens per point, fp16</div>
+          <div class="legend"><span><i class="g g-naive"></i>Naive</span><span><i class="g g-static"></i>KV cache</span></div>
+          <svg class="chart" id="ch-seq" viewBox="0 0 640 260" role="img" aria-label="Decode tokens per second versus prompt length, naive and cached"></svg>
+        </div>
+        <figcaption>From <code>bench/results/seqlen_*.json</code>. Naive per-token time grows from 36 ms at 128 tokens to 352 ms at 2,048. Cached decode holds between 47.8 and 44.7 tok/s across the same range, which makes it 16× faster at 2,048 tokens.</figcaption>
+      </figure>
+    </section>
+
+    <section id="model">
+      <h2>The model, by hand</h2>
+      <p>Qwen3-0.6B is reimplemented directly instead of imported from <code>transformers</code>. The hyperparameters are frozen in <code>engine/config.py</code>, and module names match the Hugging Face checkpoint so the safetensors load with <code>strict=True</code> and no rename table. That matters later: the parity test compares this model's greedy output against Hugging Face's, token for token.</p>
+      <div class="tbl"><table>
+        <thead><tr><th>Field</th><th class="num">Value</th><th>What it means here</th></tr></thead>
+        <tbody>
+          <tr><td><code>num_layers</code></td><td class="num">28</td><td>Decoder layers, each with its own K/V in the cache.</td></tr>
+          <tr><td><code>hidden_size</code></td><td class="num">1,024</td><td>Residual stream width.</td></tr>
+          <tr><td><code>num_heads</code> / <code>num_kv_heads</code></td><td class="num">16 / 8</td><td>Grouped-query attention: each KV head serves 2 query heads, which halves the cache.</td></tr>
+          <tr><td><code>head_dim</code></td><td class="num">128</td><td>16 × 128 = 2,048, twice the hidden size. The q projection widens and <code>o_proj</code> narrows back.</td></tr>
+          <tr><td><code>intermediate_size</code></td><td class="num">3,072</td><td>SwiGLU MLP width.</td></tr>
+          <tr><td><code>vocab_size</code></td><td class="num">151,936</td><td>Embedding and LM head share one tensor (<code>tie_word_embeddings</code>).</td></tr>
+          <tr><td><code>rope_theta</code></td><td class="num">1,000,000</td><td>RoPE base; cos/sin tables precomputed for 40,960 positions in fp32.</td></tr>
+          <tr><td><code>rms_norm_eps</code></td><td class="num">1e-6</td><td>RMSNorm normalizes in fp32 and casts back, in Hugging Face's order, which keeps the sum of squares out of fp16's limited range.</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="stack">
+        <div class="blk">
+          <h4>One decoder layer × 28</h4>
+          <div class="ops">
+            <div class="op"><span>input_layernorm</span><span>RMSNorm</span></div>
+            <div class="op hl"><span>q/k/v_proj → view heads</span><span>2048 / 1024 / 1024</span></div>
+            <div class="op hl"><span>q_norm, k_norm</span><span>per-head RMSNorm</span></div>
+            <div class="op"><span>apply_rope(q), apply_rope(k)</span><span>rotate_half</span></div>
+            <div class="op hl"><span>cache.write → cache.read</span><span>if cache</span></div>
+            <div class="op"><span>SDPA, enable_gqa=True</span><span>16q · 8kv</span></div>
+            <div class="op"><span>o_proj</span><span>2048 → 1024</span></div>
+            <div class="op res">+ residual</div>
+            <div class="op"><span>post_attention_layernorm</span><span>RMSNorm</span></div>
+            <div class="op"><span>down(silu(gate(x)) · up(x))</span><span>SwiGLU 3072</span></div>
+            <div class="op res">+ residual</div>
+          </div>
+        </div>
+        <div class="blk">
+          <h4>Model wrapper</h4>
+          <div class="ops">
+            <div class="op"><span>embed_tokens</span><span>[B,T] → [B,T,1024]</span></div>
+            <div class="op"><span>rotary(positions)</span><span>cos, sin [B,1,T,128]</span></div>
+            <div class="arrow">↓ 28 layers</div>
+            <div class="op hl"><span>norm(x[:, -1:])</span><span>last position only</span></div>
+            <div class="op"><span>lm_head</span><span>→ [B, 151936]</span></div>
+          </div>
+          <p class="caption" style="margin-top:14px">Layers are built on the <code>meta</code> device so no memory is allocated twice, then <code>load_state_dict(assign=True)</code> drops the loaded tensors straight in. Only the final position goes through the norm and LM head, since that is the only logit row any caller uses. On a 151,936-word vocabulary, that saves a lot during prefill.</p>
+        </div>
+      </div>
+
+      <h3>One forward, three call patterns</h3>
+      <p>The same <code>Qwen3.forward(input_ids, positions, cache, slots)</code> serves the naive loop, prefill and decode. Positions are always passed explicitly. That is what makes a ragged decode batch work: every row carries its own absolute position for RoPE and for the attention mask.</p>
+      <div class="tbl"><table>
+        <thead><tr><th>Pattern</th><th>Input shape</th><th>Cache</th><th>Attention</th></tr></thead>
+        <tbody>
+          <tr><td><span class="sw g g-naive"></span>naive</td><td><code>[1, T]</code></td><td>none</td><td>Over exactly the T tokens in the call, <code>is_causal=True</code>. Every new token reprocesses the full prefix.</td></tr>
+          <tr><td><span class="sw g g-static"></span>prefill</td><td><code>[1, T]</code></td><td>one slot</td><td>Writes K/V for positions 0..T−1. Because <code>T == kv_len</code>, the mask is dropped and <code>is_causal</code> is used so fused SDPA kernels stay eligible.</td></tr>
+          <tr><td><span class="sw g g-continuous"></span>decode</td><td><code>[B, 1]</code></td><td>slots 0..B−1</td><td>Appends one position per row, reads <code>kv_len = max(position) + 1</code> keys, and masks keys beyond each row's own position.</td></tr>
+        </tbody>
+      </table></div>
+<pre><span class="k">if</span> cache <span class="k">is</span> None:
+    keys, values, mask, causal = k, v, None, T &gt; 1
+<span class="k">else</span>:
+    cache.write(self.layer_idx, slots, positions, k, v)
+    keys, values, mask = cache.read(self.layer_idx, slots, positions, kv_len)
+    causal = False
+    <span class="k">if</span> T == kv_len:
+        <span class="c"># Prefill from position 0: the mask is plain causal, and passing</span>
+        <span class="c"># is_causal instead keeps the fused kernels eligible.</span>
+        mask, causal = None, T &gt; 1</pre>
+      <span class="ref"><a href="https://github.com/rehanganapathy/inferenece-from-scratch/blob/HEAD/engine/model.py">engine/model.py</a> · Attention.forward</span>
+    </section>
+
+    <section id="cache">
+      <h2>KV cache: a pool of slots</h2>
+      <p>The cache is two tensors, <code>k</code> and <code>v</code>, allocated once at startup with shape <code>[num_layers, num_slots, num_kv_heads, max_len, head_dim]</code>. A request owns one slot for its whole life and writes K/V for position <em>p</em> at index <em>p</em>. There is no paging and no sharing between requests. The interesting part is what happens when a request in the middle of the batch finishes.</p>
+
+      <figure>
+        <div class="fig scroll">
+          <div class="fig-title">Retiring a request, then packing the survivors</div>
+          <div class="fig-sub">Six slots of the pool, positions left to right. R1 hits end-of-sequence on this step.</div>
+          <div class="legend">
+            <span><i class="cellk k-solid"></i>prompt K/V</span>
+            <span><i class="cellk k-dots"></i>generated K/V</span>
+            <span><i class="cellk k-hatch"></i>released, stale</span>
+            <span><i class="cellk k-dashed"></i>reserved, unused</span>
+          </div>
+          <svg class="dg wide" id="dg-pool" viewBox="0 0 800 226" role="img" aria-label="Before packing, running requests sit on slots 0, 2 and 3 with a hole at slot 1. After packing, R2 and R3 have moved down so the batch occupies slots 0 to 2 and decode reads them as one contiguous view."></svg>
+        </div>
+        <figcaption>After R1 retires, <code>_retire</code> moves R2 into slot 1 and R3 into slot 2 with <code>cache.move</code>. The running batch is back on slots <code>[0, B)</code>, so decode can pass <code>slice(0, B)</code> and attention reads a view of the pool. Without packing, every layer of every step would gather the batch's K/V with <code>index_select</code>, a full copy; the comment in <code>cache.py</code> notes that gather dominated decode time.</figcaption>
+      </figure>
+
+      <ul class="tight">
+        <li><strong>write</strong> is one advanced-index put per tensor per layer: <code>k[layer][(slots[:,None], :, positions)] = k.transpose(1, 2)</code>.</li>
+        <li><strong>read</strong> returns <code>[B, kv_heads, kv_len, head_dim]</code> plus a boolean mask where key <em>j</em> is visible to query <em>i</em> when <code>j ≤ positions[b, i]</code>. That one rule is both the causal mask inside a prefill and the padding mask across a ragged decode batch.</li>
+        <li><strong>move</strong> copies only <code>seq_len − 1</code> positions. The newest token's K/V does not exist yet; the next decode writes it.</li>
+        <li><strong>release</strong> never clears the slot. Stale data is harmless because the mask hides every position past a sequence's own length, and <code>test_cache_slot_reuse_is_clean</code> checks exactly that.</li>
+      </ul>
+
+      <h3>How big is the pool?</h3>
+      <p>Per token, every layer stores one K and one V vector per KV head: <code>2 × 28 × 8 × 128 = 57,344</code> numbers. The pool reserves that for <code>max_len</code> positions in every slot, whether or not a request ever uses them.</p>
+      <div class="panel" id="calc">
+        <div class="ctrls">
+          <div class="ctrl"><label for="c-slots">Slots (MAX_BATCH)</label><input id="c-slots" type="range" min="1" max="64" value="32"><span id="c-slots-v" class="mono">32</span></div>
+          <div class="ctrl"><label for="c-len">Slot length (MAX_LEN)</label><input id="c-len" type="range" min="7" max="13" value="11"><span id="c-len-v" class="mono">2048</span></div>
+          <div class="ctrl"><span class="lab">Dtype</span>
+            <div class="seg" role="group" aria-label="dtype">
+              <button type="button" id="dt-fp16" data-dt="2" aria-pressed="true">fp16</button><button type="button" id="dt-bf16" data-dt="2" aria-pressed="false">bf16</button><button type="button" id="dt-fp32" data-dt="4" aria-pressed="false">fp32</button>
+            </div>
+          </div>
+        </div>
+        <div class="readout">
+          <div><div class="k">Per token</div><div class="v" id="c-tok">112 KiB</div></div>
+          <div><div class="k">Per slot</div><div class="v" id="c-slot">224 MiB</div></div>
+          <div><div class="k">Whole pool</div><div class="v warn" id="c-pool">7.0 GiB</div></div>
+          <div><div class="k">Weights, for scale</div><div class="v" id="c-w">1.1 GiB</div></div>
+        </div>
+        <div class="bar-res" aria-hidden="true"><i id="c-used"></i></div>
+        <div class="bar-cap"><span id="c-used-t">Median trace request uses 408 of 2048 positions</span><span id="c-waste">80% of each slot reserved but idle</span></div>
+      </div>
+      <p>With the server defaults (<code>MAX_BATCH=32</code>, <code>MAX_LEN=2048</code>) the pool is 7.0 GiB in fp16, more than six times the size of the model's weights. Until recently the Mac default was fp32, which doubled it to 14 GiB before a single request arrived. The median request in the benchmark trace (279 prompt + 128 output tokens) fills about a fifth of its slot. That reserved, idle space is exactly what paged attention, planned for a later phase, removes.</p>
+    </section>
+
+    <section id="scheduler">
+      <h2>Scheduling: static vs continuous</h2>
+      <p>A batch of one wastes most of the GPU, because decode is limited by reading weights from memory, and every request in a batch shares that read. So the scheduler runs one forward pass for all running requests at once. Requests move through three collections: a <code>waiting</code> deque, a <code>running</code> list and a <code>finished</code> list. All of the batching behaviour lives in one method, and the order of its four calls matters.</p>
+<pre><span class="k">def</span> step(self) -&gt; StepStats:
+    n_running = len(self.running)
+    tokens = 0
+    <span class="k">if</span> self.running:
+        tokens += self._decode(self.running)   <span class="c"># one [B, 1] forward for every running request</span>
+        self._retire()                         <span class="c"># free slots of anything that hit EOS / max_tokens</span>
+    admitted = self._admit()                   <span class="c"># fill free slots, prefill each admission</span>
+    tokens += admitted
+    self._retire()                             <span class="c"># an admission can finish on its first token</span>
+    ...</pre>
+      <span class="ref"><a href="https://github.com/rehanganapathy/inferenece-from-scratch/blob/HEAD/engine/sched.py">engine/sched.py</a> · Scheduler.step</span>
+
+      <h3>The whole difference is one branch</h3>
+      <p>The static baseline is not separate code. <code>_admit</code> starts with <code>if self.mode == "static" and self.running: return 0</code>. In static mode nothing joins until the whole batch has drained, so slots freed by short requests sit idle while the longest one finishes. In continuous mode a freed slot is refilled on the same step. Both modes share everything else, so any benchmark difference between them is the admission policy alone.</p>
+
+      <h3>Watch it run</h3>
+      <p>A simplified replay of <code>Scheduler.step()</code> in the browser on 4 slots, using the output lengths of the first 12 requests in <code>bench/traces/mixed.json</code>. Every step decodes one token per running request, and each admission's prefill yields its first token. All 12 are queued up front. Arrows mark survivors that were just moved down a slot.</p>
+      <div class="panel" id="sim">
+        <div class="ctrls">
+          <div class="ctrl"><span class="lab">Admission</span>
+            <div class="seg" role="group" aria-label="mode">
+              <button type="button" id="m-cont" data-mode="continuous" aria-pressed="true">Continuous</button><button type="button" id="m-static" data-mode="static" aria-pressed="false">Static</button>
+            </div>
+          </div>
+          <div class="ctrl"><span class="lab">&nbsp;</span>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button type="button" class="btn primary" id="s-play">Play</button>
+              <button type="button" class="btn" id="s-step">Step</button>
+              <button type="button" class="btn" id="s-reset">Reset</button>
+            </div>
+          </div>
+        </div>
+        <div class="readout" style="margin-bottom:14px">
+          <div><div class="k">Step</div><div class="v" id="s-n">0</div></div>
+          <div><div class="k">Tokens out</div><div class="v" id="s-tok">0</div></div>
+          <div><div class="k">Mean occupancy</div><div class="v" id="s-occ">–</div></div>
+          <div><div class="k">Finished</div><div class="v" id="s-fin">0 / 12</div></div>
+        </div>
+        <div class="slots" id="s-slots"></div>
+        <div class="qrow"><span>Waiting</span><div class="queue" id="s-wait"></div></div>
+        <div class="qrow"><span>Done</span><div class="queue" id="s-done"></div></div>
+        <canvas id="occ" aria-label="busy slots per step"></canvas>
+        <div class="cmp tbl" style="margin-bottom:0"><table>
+          <thead><tr><th>Full replay</th><th class="num">Steps</th><th class="num">Mean occupancy</th><th class="num">Tokens / step</th></tr></thead>
+          <tbody id="s-cmp"></tbody>
+        </table></div>
+      </div>
+      <p>Two things are deliberately missing, and the docstring says so. There is <strong>no preemption</strong>: an admitted request runs to completion. There is <strong>no chunked prefill</strong>: an admission's entire prompt is processed inside the step, so every running request waits for it. The benchmarks show what that second one costs.</p>
+    </section>
+
+    <section id="lifecycle">
+      <h2>Life of a request</h2>
+      <p>Follow one streamed chat request from the HTTP body to the last SSE event. Three execution contexts share the work: the asyncio event loop, a 4-thread tokenizer pool, and a single step thread that owns the model and the KV cache. The design goal is simple. The event loop must never block on the GPU, and the GPU must never wait on Python string handling.</p>
+
+      <figure>
+        <div class="fig scroll">
+          <div class="fig-title">Who does what, in order</div>
+          <div class="fig-sub">Time runs down. Boxes with a heavy outline run on the step thread, the only thread that touches the model.</div>
+          <svg class="dg wide" viewBox="0 0 860 650" role="img" aria-label="Sequence of a streamed request across the client, the event loop, the tokenizer pool and the step thread. The step thread admits and prefills, then each token hops to the event loop through a queue, is detokenized on the pool, and is sent to the client as an SSE chunk. Decode repeats that path once per token until retire sends the final chunk.">
+            <defs>
+              <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker>
+              <marker id="ahacc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah acc" d="M0,0 L10,5 L0,10 z"/></marker>
+            </defs>
+            <!-- lanes -->
+            <rect class="lanebg" x="30" y="10" width="160" height="630" rx="8"/>
+            <rect class="lanebg" x="196" y="10" width="208" height="630" rx="8"/>
+            <rect class="lanebg" x="410" y="10" width="190" height="630" rx="8"/>
+            <rect class="lanebg" x="606" y="10" width="244" height="630" rx="8"/>
+            <text class="h" x="110" y="32" text-anchor="middle">Client</text>
+            <text class="h" x="300" y="32" text-anchor="middle">Event loop</text>
+            <text class="h" x="505" y="32" text-anchor="middle">Tokenizer pool ×4</text>
+            <text class="h" x="728" y="32" text-anchor="middle">Step thread · GPU</text>
+
+            <!-- r0 client -->
+            <rect class="box cli" x="40" y="56" width="140" height="34" rx="6"/>
+            <text x="110" y="77" text-anchor="middle">POST, stream=true</text>
+            <!-- r1 loop -->
+            <rect class="box" x="205" y="110" width="190" height="34" rx="6"/>
+            <text x="300" y="131" text-anchor="middle">validate, chat template</text>
+            <!-- r2 tok -->
+            <rect class="box" x="425" y="164" width="160" height="34" rx="6"/>
+            <text x="505" y="185" text-anchor="middle">encode → ids</text>
+            <!-- r3 loop -->
+            <rect class="box" x="205" y="218" width="190" height="34" rx="6"/>
+            <text x="300" y="239" text-anchor="middle">submit: Request + Queue</text>
+            <!-- r4 step -->
+            <rect class="box gpu" x="628" y="272" width="200" height="34" rx="6"/>
+            <text x="728" y="293" text-anchor="middle">admit: slot, prefill → tok 1</text>
+            <!-- r5 loop -->
+            <rect class="box" x="205" y="326" width="190" height="34" rx="6"/>
+            <text x="300" y="347" text-anchor="middle">queue receives token id</text>
+            <!-- r6 tok -->
+            <rect class="box" x="425" y="380" width="160" height="34" rx="6"/>
+            <text x="505" y="401" text-anchor="middle">detok.push → delta</text>
+            <!-- r7 client -->
+            <rect class="box cli" x="40" y="434" width="140" height="34" rx="6"/>
+            <text x="110" y="455" text-anchor="middle">SSE chunk arrives</text>
+            <!-- r8 step -->
+            <rect class="box gpu" x="628" y="488" width="200" height="34" rx="6"/>
+            <text x="728" y="509" text-anchor="middle">decode [B, 1] → next tok</text>
+            <!-- r9 step -->
+            <rect class="box gpu" x="628" y="542" width="200" height="34" rx="6"/>
+            <text x="728" y="563" text-anchor="middle">retire: free slot, pack</text>
+            <!-- r10 client -->
+            <rect class="box cli" x="40" y="596" width="140" height="34" rx="6"/>
+            <text x="110" y="617" text-anchor="middle">final chunk, [DONE]</text>
+
+            <!-- wires: down from source centre, then across to target edge -->
+            <path class="wire" d="M110,90 V127 H203" marker-end="url(#ah)"/>
+            <text class="m" x="156" y="121" text-anchor="middle">HTTP</text>
+            <path class="wire" d="M300,144 V181 H423" marker-end="url(#ah)"/>
+            <text class="m" x="362" y="175" text-anchor="middle">executor</text>
+            <path class="wire" d="M505,198 V235 H397" marker-end="url(#ah)"/>
+            <text class="m" x="452" y="229" text-anchor="middle">ids</text>
+            <path class="wire" d="M300,252 V289 H626" marker-end="url(#ah)"/>
+            <text class="m" x="505" y="283" text-anchor="middle">waiting deque · wake.set()</text>
+            <path class="wire" d="M728,306 V343 H397" marker-end="url(#ah)"/>
+            <text class="m" x="505" y="337" text-anchor="middle">call_soon_threadsafe</text>
+            <path class="wire" d="M300,360 V397 H423" marker-end="url(#ah)"/>
+            <text class="m" x="362" y="391" text-anchor="middle">await q.get()</text>
+            <path class="wire" d="M505,414 V451 H182" marker-end="url(#ah)"/>
+            <text class="m" x="300" y="445" text-anchor="middle">yield sse(delta)</text>
+            <path class="wire" d="M728,522 V540" marker-end="url(#ah)"/>
+            <text class="m" x="740" y="535">EOS or max_tokens</text>
+            <path class="wire" d="M728,576 V613 H182" marker-end="url(#ah)"/>
+            <text class="m" x="410" y="607" text-anchor="middle">None → finish_reason, usage</text>
+            <!-- per-token loop -->
+            <path class="wire dash" d="M828,505 H842 V289 H830" marker-end="url(#ahacc)"/>
+            <text class="m" x="728" y="394" text-anchor="middle">each decoded token takes</text>
+            <text class="m" x="728" y="410" text-anchor="middle">the same path as tok 1:</text>
+            <text class="m" x="728" y="426" text-anchor="middle">steps 5 → 6 → 7</text>
+
+            <!-- step numbers -->
+            <g>
+              <circle class="ncirc" cx="205" cy="110" r="9"/><text class="num" x="205" y="114" text-anchor="middle">1</text>
+              <circle class="ncirc" cx="425" cy="164" r="9"/><text class="num" x="425" y="168" text-anchor="middle">2</text>
+              <circle class="ncirc" cx="205" cy="218" r="9"/><text class="num" x="205" y="222" text-anchor="middle">3</text>
+              <circle class="ncirc" cx="628" cy="272" r="9"/><text class="num" x="628" y="276" text-anchor="middle">4</text>
+              <circle class="ncirc" cx="205" cy="326" r="9"/><text class="num" x="205" y="330" text-anchor="middle">5</text>
+              <circle class="ncirc" cx="425" cy="380" r="9"/><text class="num" x="425" y="384" text-anchor="middle">6</text>
+              <circle class="ncirc" cx="40" cy="434" r="9"/><text class="num" x="40" y="438" text-anchor="middle">7</text>
+              <circle class="ncirc" cx="628" cy="488" r="9"/><text class="num" x="628" y="492" text-anchor="middle">8</text>
+              <circle class="ncirc" cx="628" cy="542" r="9"/><text class="num" x="628" y="546" text-anchor="middle">9</text>
+            </g>
+          </svg>
+        </div>
+        <figcaption>The step thread never awaits anything and the event loop never runs a forward pass. Tokens cross from one to the other through a per-request <code>asyncio.Queue</code>, fed with <code>loop.call_soon_threadsafe</code>.</figcaption>
+      </figure>
+
+      <div class="flow">
+        <div class="st"><div class="n"></div><div><div class="t">Validate and template <span class="lane">event loop</span></div><div class="dsc">Pydantic validates the body. Messages go through Qwen3's chat template; <code>enable_thinking</code> decides whether the model may open a <code>&lt;think&gt;</code> block.</div></div><div class="where">chat_completions()</div></div>
+        <div class="st"><div class="n"></div><div><div class="t">Encode off the loop <span class="lane">tok pool</span></div><div class="dsc">The tokenizer runs in a thread pool so tokenizing a long prompt does not stall other streams. Then <code>_check</code> rejects prompt + max_tokens over <code>MAX_LEN</code> with a 400.</div></div><div class="where">Engine.encode</div></div>
+        <div class="st"><div class="n"></div><div><div class="t">Submit <span class="lane">event loop</span></div><div class="dsc"><code>Engine.submit</code> builds a <code>Request</code> whose <code>on_token</code> callback feeds a fresh <code>asyncio.Queue</code>, appends it to <code>sched.waiting</code> under a lock, and sets the <code>wake</code> event so an idle step loop starts again.</div></div><div class="where">Engine.submit</div></div>
+        <div class="st"><div class="n"></div><div><div class="t">Admit and prefill <span class="lane gpu">step thread</span></div><div class="dsc">On the next <code>step()</code>, if a slot is free (and, in static mode, the batch is empty), the request takes the lowest free slot and its whole prompt runs through the model once. That writes K/V for every prompt position and samples the first token.</div></div><div class="where">Scheduler._admit</div></div>
+        <div class="st"><div class="n"></div><div><div class="t">Hop back to the loop <span class="lane">event loop</span></div><div class="dsc"><code>on_token</code> runs on the step thread, so it calls <code>loop.call_soon_threadsafe(q.put_nowait, tok)</code> and returns immediately. The forward pass never waits for a slow client.</div></div><div class="where">on_token</div></div>
+        <div class="st"><div class="n"></div><div><div class="t">Detokenize incrementally <span class="lane">tok pool</span></div><div class="dsc"><code>stream_text</code> awaits the queue and pushes each id into an <code>IncrementalDetokenizer</code>, which returns only the new text. Half of a multi-byte character returns nothing until the next token completes it.</div></div><div class="where">Engine.stream_text</div></div>
+        <div class="st"><div class="n"></div><div><div class="t">Stream <span class="lane">client</span></div><div class="dsc">Each delta becomes one <code>chat.completion.chunk</code> event on the open SSE response.</div></div><div class="where">StreamingResponse</div></div>
+        <div class="st"><div class="n"></div><div><div class="t">Decode, one token per step <span class="lane gpu">step thread</span></div><div class="dsc">Every following step runs one <code>[B, 1]</code> forward over the whole running set, each row at its own position. Each new token takes the path through steps 5 to 7.</div></div><div class="where">Scheduler._decode</div></div>
+        <div class="st"><div class="n"></div><div><div class="t">Retire <span class="lane gpu">step thread</span></div><div class="dsc">On EOS (<code>&lt;|im_end|&gt;</code> or <code>&lt;|endoftext|&gt;</code>) or max_tokens the request leaves the running set, its slot is released, survivors are packed down, and a <code>None</code> on the queue tells the handler to send the final chunk and <code>[DONE]</code>.</div></div><div class="where">Scheduler._retire</div></div>
+      </div>
+
+<pre><span class="k">async def</span> run_loop(self):
+    loop = asyncio.get_running_loop()
+    <span class="k">while</span> True:
+        <span class="k">if not</span> self.sched.has_work():
+            self.wake.clear()
+            <span class="k">await</span> self.wake.wait()            <span class="c"># idle until submit() sets it</span>
+        <span class="k">await</span> loop.run_in_executor(self.step_pool, self.sched.step)
+        self.steps += 1</pre>
+      <span class="ref"><a href="https://github.com/rehanganapathy/inferenece-from-scratch/blob/HEAD/engine/server.py">engine/server.py</a> · Engine.run_loop</span>
+      <p>The step pool has exactly one worker, so the model and cache are only ever touched by one thread and need no locking. The only structure shared across threads is the waiting deque, guarded by <code>sched.lock</code>.</p>
+    </section>
+
+    <section id="precision">
+      <h2>The fp32 default that cost half the throughput</h2>
+      <p>For most of this project the engine ran in fp32 on the Mac. The reason was one line in <code>engine/config.py</code>: bf16 on CUDA, fp32 everywhere else, "where bf16 kernels are slow or missing." That was a reasonable guess for older MPS builds. It had never been measured on this machine.</p>
+      <p>Measuring it took one short script: the same 200-token prompt, 128 greedy tokens, one model load per dtype.</p>
+      <div class="tbl"><table>
+        <thead><tr><th>dtype</th><th class="num">tok/s, 1 request</th><th>tok/s, batch of 16</th><th class="num">weights + 16×1k KV</th><th class="num">matches fp32 greedy</th></tr></thead>
+        <tbody>
+          <tr><td>fp32</td><td class="num">34.1</td><td><span class="inbar inbar--ref" style="width:54px"></span><span class="mono">338</span></td><td class="num">6.1 GB</td><td class="num">reference</td></tr>
+          <tr class="hl"><td><strong>fp16</strong></td><td class="num">42.9</td><td><span class="inbar" style="width:100px"></span><span class="mono">629</span></td><td class="num">3.1 GB</td><td class="num">128 of 128 tokens</td></tr>
+          <tr><td>bf16</td><td class="num">43.0</td><td><span class="inbar" style="width:100px"></span><span class="mono">631</span></td><td class="num">3.1 GB</td><td class="num">diverges at token 16</td></tr>
+        </tbody>
+      </table></div>
+      <p class="pull">Half precision was 1.9× faster in a batch and used half the memory. The fallback was the slow path.</p>
+      <p>Both half-precision formats run at the same speed on the M5, so the choice came down to numerics. bf16 keeps fp32's range but only 8 bits of mantissa, so near-ties between two candidate tokens flip and the text drifts from fp32 after a few words. The output is not worse, just different. fp16 has 11 bits of mantissa and tracked fp32 exactly for all 128 tokens. Its risk is the other direction: a maximum of about 65,504, which a model trained in bf16 could exceed in some activation. Qwen3 normalizes its queries and keys per head, and this code runs RMSNorm in fp32, so that never happened here. If it ever does, <code>DTYPE=bf16</code> is the switch.</p>
+<pre><span class="k">def</span> pick_dtype(device, name=None):
+    <span class="k">if</span> name:
+        <span class="k">return</span> {<span class="k">"bf16"</span>: torch.bfloat16, <span class="k">"fp16"</span>: torch.float16, <span class="k">"fp32"</span>: torch.float32}[name]
+    <span class="k">return</span> {<span class="k">"cuda"</span>: torch.bfloat16, <span class="k">"mps"</span>: torch.float16}.get(device.type, torch.float32)</pre>
+      <span class="ref"><a href="https://github.com/rehanganapathy/inferenece-from-scratch/blob/HEAD/engine/config.py">engine/config.py</a> · pick_dtype</span>
+      <p>The new default halves the KV pool from 14 GiB to 7 GiB and brings the batched numbers below with it. On the trace, continuous batching at concurrency 4 went from 34.4 tok/s in the old fp32 run (first 12 requests) to 140.9 tok/s (first 64). That jump is larger than precision alone explains. The request mix differs, and the machine moved from macOS 26.6 to 27.0 between the two runs. The table above is the controlled comparison. The correctness tests still run in fp32 on purpose: they compare token ids exactly, and exact comparisons need exact arithmetic.</p>
+    </section>
+
+    <section id="bench">
+      <h2>Benchmarks</h2>
+      <p>The harness came first, before any optimization, so every number is comparable. It drives a scheduler in-process with no HTTP in the loop and timestamps every generated token. Runs are <strong>closed-loop</strong>: <em>c</em> requests stay in flight and each completion triggers the next submission. EOS is ignored so the trace's output lengths are what gets measured. Two warm-up requests run first so kernel compilation is not billed to request 0.</p>
+      <p>The trace (<code>make_trace.py</code>, seed 1234) draws requests from log-normal distributions: prompts with median 279 tokens (22 to 1,024), outputs with median 128 (21 to 512). Same-length requests would hide the entire benefit of continuous batching, because they would all finish together.</p>
+
+      <div class="pair">
+        <figure>
+          <div class="fig">
+            <div class="fig-title">Throughput vs concurrency</div>
+            <div class="fig-sub">Output tokens/s, first 64 trace requests</div>
+            <div class="legend"><span><i class="g g-continuous"></i>Continuous</span><span><i class="g g-static"></i>Static</span><span><i class="g g-naive"></i>Naive (serial)</span></div>
+            <svg class="chart" id="ch-tp" viewBox="0 0 400 280" role="img" aria-label="Output tokens per second at concurrency 1, 4, 16 and 32 for static and continuous batching, with naive as a reference line"></svg>
+          </div>
+        </figure>
+        <figure>
+          <div class="fig">
+            <div class="fig-title">Time to first token vs concurrency</div>
+            <div class="fig-sub">Median seconds from submit to first token, log scale</div>
+            <div class="legend"><span><i class="g g-continuous"></i>Continuous</span><span><i class="g g-static"></i>Static</span></div>
+            <svg class="chart" id="ch-ttft" viewBox="0 0 400 280" role="img" aria-label="Median time to first token at concurrency 1, 4, 16 and 32 for static and continuous batching"></svg>
+          </div>
+        </figure>
+      </div>
+      <p>Continuous batching beats static at every concurrency above 1, by 1.85× at 4 slots, 1.64× at 16 and 1.30× at 32. At concurrency 1 the two modes are the same algorithm and land on the same 44.6 tok/s. At 32 slots the 64-request run is only two static batches deep, so that point says less about the gap than the others. Against the naive loop, which serves one request at a time at 9.6 tok/s, continuous batching at 32 slots is 32× faster on the same machine.</p>
+      <p>The bigger difference is latency. At 16 slots a static request waits a median 8.2 s for its first token, because it cannot join until the whole batch drains. Continuous admits it on the next step, in 134 ms. Static's median dips at 32 slots only because half of the 64 requests sit in the first batch and start at once. The price shows up in time per output token: 48 ms against static's 41 at 16 slots, and 79 against 65 at 32. Every admission's prefill runs inside a step, and every running stream waits for it. That is the chunked-prefill item on the deferred list.</p>
+
+      <figure>
+        <div class="fig">
+          <div class="fig-title">Busy slots over time, 16 slots, same 64 requests</div>
+          <div class="fig-sub">Running requests at each step</div>
+          <div class="legend"><span><i class="cellk k-hatch"></i>Static</span><span><i class="cellk k-dots"></i>Continuous</span></div>
+          <svg class="chart" id="ch-occ" viewBox="0 0 640 300" role="img" aria-label="Slot occupancy over time at concurrency 16, static and continuous"></svg>
+        </div>
+        <figcaption>From the <code>steps</code> arrays of <code>trace_static_c16.json</code> and <code>trace_continuous_c16.json</code>. Continuous holds near 16 until the queue runs dry; static decays after every refill while it waits for the batch's longest request. Percentages are time-weighted over each run.</figcaption>
+      </figure>
+
+      <h3>Every run</h3>
+      <div class="tbl"><table>
+        <thead><tr><th>Run</th><th class="num">Requests</th><th class="num">tok/s</th><th class="num">TTFT p50</th><th class="num">TTFT p90</th><th class="num">TPOT p50</th><th class="num">Latency p50</th><th class="num">Wall</th></tr></thead>
+        <tbody id="runs"></tbody>
+      </table></div>
+      <div class="note"><strong>Reading these numbers.</strong> Measured on an Apple M5 through MPS in fp16 (<code>HARDWARE.md</code>), on the first 64 requests of the trace; naive used 12, since it serves them one at a time. The 24 GB CUDA GPU the plan targets, bf16 on CUDA, and concurrency 64 are still to come. The older fp32 runs are kept in <code>bench/results/fp32-2026-09/</code>.</div>
+      <pre><span class="c"># the three headline runs, same command, mode swapped</span>
+make bench-naive
+make bench-static
+make bench-continuous
+make sweep      <span class="c"># concurrency sweep for all three</span>
+make seqlen     <span class="c"># single-request sequence-length sweep</span>
+make figures    <span class="c"># runs whatever is missing, writes figures/out/*.png|svg</span></pre>
+    </section>
+
+    <section id="run">
+      <h2>Run it</h2>
+<pre>git clone https://github.com/rehanganapathy/inferenece-from-scratch.git
+cd inferenece-from-scratch</pre>
+      <p>The server ships with a small chat page at <code>/</code>: one HTML file, no build step, no dependencies. It streams from the OpenAI-style endpoint, keeps a multi-turn history, shows Qwen3's thinking block dimmed when you enable it, and reports tokens per second and time to first token under every reply. A status line in the header polls <code>/stats</code> every two seconds.</p>
+      <div class="mock" aria-label="Sketch of the chat page">
+        <div class="bar"><b>inference-engine</b><span><span class="dot"></span>mps · float16 · running 1 · waiting 0 · KV 7.516 GB</span></div>
+        <div class="body">
+          <div><div class="who">you</div><div class="u">Explain KV caching in one sentence.</div></div>
+          <div><div class="who">qwen3</div>KV caching is a technique used to store frequently accessed key-value pairs in memory to improve performance by reducing the number of disk I/O operations.<div class="meta">29 tokens · stop</div></div>
+        </div>
+        <div class="in"><span>Message</span><em>Send</em></div>
+      </div>
+      <p class="caption" style="margin-top:-12px;margin-bottom:22px">A sketch of the page. The reply is the real one from the first fp16 smoke test: a 0.6B model, asked about KV caching, confidently describes a different kind of KV cache. Temperature, top_p, max_tokens and the thinking toggle sit under the input.</p>
+<pre>make install          <span class="c"># uv sync; the first test run downloads Qwen3-0.6B (1.4 GB)</span>
+make serve            <span class="c"># then open http://localhost:8000</span>
+
+curl -N localhost:8000/v1/chat/completions -H 'Content-Type: application/json' \
+  -d '{"messages":[{"role":"user","content":"hi"}],"stream":true}'
+curl -N localhost:8000/generate -H 'Content-Type: application/json' \
+  -d '{"prompt":"Explain KV caching.","max_tokens":128,"chat":true}'
+curl localhost:8000/stats</pre>
+      <div class="tbl"><table>
+        <thead><tr><th>Route</th><th>Behaviour</th></tr></thead>
+        <tbody>
+          <tr><td><code>GET /</code></td><td>The chat page.</td></tr>
+          <tr><td><code>POST /v1/chat/completions</code></td><td>OpenAI-shaped. <code>stream: true</code> sends <code>chat.completion.chunk</code> deltas; otherwise one JSON body with usage. Supports <code>enable_thinking</code>.</td></tr>
+          <tr><td><code>POST /generate</code></td><td>Raw prompt (optional <code>chat</code> wrapping). SSE stream of <code>{"text", "token_id"}</code>, then <code>{"done", "finish_reason", "usage"}</code> and <code>[DONE]</code>.</td></tr>
+          <tr><td><code>GET /stats</code></td><td>Device, dtype, pool size in GB, running / waiting / finished counts, steps per second.</td></tr>
+          <tr><td><code>GET /health</code></td><td><code>{"ok": true}</code> once the engine is built.</td></tr>
+        </tbody>
+      </table></div>
+      <p>Configuration is environment variables: <code>DEVICE</code> and <code>DTYPE</code> override the automatic choice, <code>MAX_BATCH</code> (32) and <code>MAX_LEN</code> (2048) size the KV pool, and <code>MODEL_DIR</code> points at a local checkpoint.</p>
+    </section>
+
+    <section id="tests">
+      <h2>Correctness gates</h2>
+      <p>Every gate compares token ids, not text. A broken KV cache usually produces fluent, plausible output that is simply different, so "looks fine" catches nothing. An off-by-one RoPE position reads like a model having a slightly odd day.</p>
+      <div class="gates">
+        <div class="gate"><code>test_hf_parity_naive_greedy</code><div>Our no-cache forward pass against Hugging Face <code>generate</code>, greedy, 64 tokens. The anchor for everything else.</div></div>
+        <div class="gate"><code>test_cached_matches_naive</code><div>Prefill + decode must reproduce the naive path exactly on three prompts. Reports the first diverging index, which is where an off-by-one position shows up.</div></div>
+        <div class="gate"><code>test_cache_slot_reuse_is_clean</code><div>A slot that held a long sequence must not leak stale K/V into a shorter one.</div></div>
+        <div class="gate"><code>test_batched_matches_single</code><div>Six requests through a 4-slot scheduler, both modes, each must match its single-request oracle. Asserts batching actually happened and every slot was returned.</div></div>
+        <div class="gate"><code>test_slot_packing_preserves_outputs</code><div>Staggered lengths force <code>cache.move</code> mid-flight; outputs must still match. Fails if no move occurred, so it cannot pass vacuously.</div></div>
+        <div class="gate"><code>test_static_mode_waits_for_batch_to_drain</code><div>Admission happens in bursts and never while a batch is running.</div></div>
+        <div class="gate"><code>test_concurrent_streams_are_all_correct</code><div>12 concurrent SSE streams through the real FastAPI app. Identical prompts must give identical text regardless of batch-mates.</div></div>
+        <div class="gate"><code>test_ui_is_served</code><div>The chat page is served at <code>/</code> as HTML and talks to the chat endpoint.</div></div>
+        <div class="gate"><code>test_units.py</code><div>Greedy is argmax, top-k restricts support, top-p always keeps one token, mixed greedy/sampled rows, detokenizer matches one-shot decode on accents, Japanese and emoji. No weights needed.</div></div>
+      </div>
+    </section>
+
+    <section id="edges">
+      <h2>Sharp edges and what comes next</h2>
+      <ul class="tight">
+        <li><strong>Prefill stalls decode.</strong> Admission prefills the full prompt inside <code>step()</code>, so a 1,024-token prompt holds every running stream for that whole pass. It shows up as continuous batching's higher time per output token. Chunked prefill is the fix.</li>
+        <li><strong>Stop does not stop the GPU.</strong> The chat page's Stop button closes the stream, but the scheduler has no cancellation, so the request keeps generating until <code>max_tokens</code>. A disconnect hook that marks the request finished is a small change.</li>
+        <li><strong>Reserved, idle cache.</strong> Every slot holds <code>MAX_LEN</code> positions, 7 GiB at the defaults. Paged attention and prefix caching are the next-phase fixes.</li>
+        <li><strong>No back-pressure.</strong> The waiting deque is unbounded and there is no preemption; a long request holds its slot until it finishes.</li>
+        <li><strong>Static refills one step late.</strong> The harness submits replacements only after <code>step()</code> returns, so a static batch restarts with one slot short. It slightly understates static throughput.</li>
+        <li><strong>Provenance.</strong> Result files record <code>git: null</code>, because the machine's <code>git</code> binary could not run when they were produced.</li>
+      </ul>
+      <p>Explicitly out of scope for phase 1, per <code>phase-1-plan.md</code>: paged attention, prefix caching, chunked prefill, preemption, quantization, CUDA graphs, Triton kernels, tensor parallelism and Prometheus metrics.</p>
+    </section>
+
+    <section id="map">
+      <h2>Repo map</h2>
+      <p><code>engine/</code> is the runtime; <code>bench/</code> and <code>figures/</code> produce the numbers; <code>tests/</code> holds the token-for-token gates that let everything else be refactored safely.</p>
+      <div class="tbl"><table>
+        <thead><tr><th>File</th><th class="num">Lines</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td><a href="https://github.com/rehanganapathy/inferenece-from-scratch/blob/HEAD/engine/config.py"><code>engine/config.py</code></a></td><td class="num">90</td><td>Frozen <code>ModelConfig</code> with Qwen3-0.6B's hyperparameters, plus device and dtype selection.</td></tr>
+          <tr><td><a href="https://github.com/rehanganapathy/inferenece-from-scratch/blob/HEAD/engine/weights.py"><code>engine/weights.py</code></a></td><td class="num">46</td><td>Fetches the checkpoint from the Hugging Face hub if needed, reads safetensors into a plain dict, strips the <code>model.</code> prefix.</td></tr>
+          <tr><td><a href="https://github.com/rehanganapathy/inferenece-from-scratch/blob/HEAD/engine/model.py"><code>engine/model.py</code></a></td><td class="num">248</td><td>RMSNorm, RoPE, GQA attention with per-head q/k norm, SwiGLU MLP, and the two single-request reference generators.</td></tr>
+          <tr><td><a href="https://github.com/rehanganapathy/inferenece-from-scratch/blob/HEAD/engine/cache.py"><code>engine/cache.py</code></a></td><td class="num">117</td><td><code>KVPool</code>: alloc, release, move, write, read.</td></tr>
+          <tr><td><a href="https://github.com/rehanganapathy/inferenece-from-scratch/blob/HEAD/engine/sched.py"><code>engine/sched.py</code></a></td><td class="num">263</td><td><code>Request</code>, <code>Scheduler.step()</code> in continuous and static modes, and the <code>NaiveScheduler</code> baseline.</td></tr>
+          <tr><td><a href="https://github.com/rehanganapathy/inferenece-from-scratch/blob/HEAD/engine/sampling.py"><code>engine/sampling.py</code></a></td><td class="num">54</td><td>Batched greedy / temperature / top-k / top-p with per-row parameters.</td></tr>
+          <tr><td><a href="https://github.com/rehanganapathy/inferenece-from-scratch/blob/HEAD/engine/tokenizer.py"><code>engine/tokenizer.py</code></a></td><td class="num">52</td><td>Tokenizer loading and the incremental detokenizer.</td></tr>
+          <tr><td><a href="https://github.com/rehanganapathy/inferenece-from-scratch/blob/HEAD/engine/server.py"><code>engine/server.py</code></a></td><td class="num">260</td><td>FastAPI app: step loop on a worker thread, chat page, <code>/generate</code>, <code>/v1/chat/completions</code>, <code>/stats</code>.</td></tr>
+          <tr><td><a href="https://github.com/rehanganapathy/inferenece-from-scratch/blob/HEAD/engine/static/index.html"><code>engine/static/index.html</code></a></td><td class="num">237</td><td>The chat page. Plain HTML and JavaScript.</td></tr>
+          <tr><td><a href="https://github.com/rehanganapathy/inferenece-from-scratch/blob/HEAD/bench/harness.py"><code>bench/harness.py</code></a></td><td class="num">306</td><td>Closed-loop trace runner, sequence-length sweep, concurrency sweep.</td></tr>
+          <tr><td><a href="https://github.com/rehanganapathy/inferenece-from-scratch/blob/HEAD/bench/make_trace.py"><code>bench/make_trace.py</code></a></td><td class="num">51</td><td>Seeded log-normal trace with mixed prompt and output lengths.</td></tr>
+          <tr><td><a href="https://github.com/rehanganapathy/inferenece-from-scratch/tree/HEAD/figures"><code>figures/*.py</code></a></td><td class="num">256</td><td>One script per figure, reading <code>bench/results/*.json</code>.</td></tr>
+          <tr><td><a href="https://github.com/rehanganapathy/inferenece-from-scratch/tree/HEAD/tests"><code>tests/</code></a></td><td class="num">316</td><td>HF parity, cache equals naive, batched equals single-request, slot packing, server end-to-end.</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+          </div>
+          <nav class="m-postnav" aria-label="Post navigation">
+            <a href="/" class="m-btn">All posts</a>
+            <a href="https://github.com/rehanganapathy/inferenece-from-scratch" class="m-btn m-btn--default">Code on GitHub</a>
+          </nav>
+        </div>
+        <div class="m-scroll" aria-hidden="true">
+          <div class="m-scroll__arrow"><svg width="10" height="8" viewBox="0 0 10 8"><path d="M5 1 L9 7 H1 Z" fill="none" stroke="#000"></path></svg></div>
+          <div class="m-scroll__track m-desk"><div class="m-scroll__thumb" style="top:0"></div></div>
+          <div class="m-scroll__arrow"><svg width="10" height="8" viewBox="0 0 10 8"><path d="M5 7 L9 1 H1 Z" fill="none" stroke="#000"></path></svg></div>
+        </div>
+      </div>
+    </article>
+  </main>
+</div>
+<div class="tip" id="tip" hidden></div>
+<script src="../assets/retro.js"></script>
+<script>
+const DATA = {"seqlen":{"naive":[{"L":128,"tps":27.67,"ms":36.1,"first_ms":33.1},{"L":256,"tps":16.72,"ms":59.8,"first_ms":45.5},{"L":512,"tps":10.33,"ms":96.8,"first_ms":81.9},{"L":768,"tps":7.36,"ms":135.8,"first_ms":122.1},{"L":1024,"tps":5.75,"ms":173.9,"first_ms":161.3},{"L":1536,"tps":3.81,"ms":262.2,"first_ms":252.7},{"L":2048,"tps":2.84,"ms":352.3,"first_ms":341.2}],"cached":[{"L":128,"tps":47.72,"ms":21.0,"first_ms":35.9},{"L":256,"tps":47.75,"ms":20.9,"first_ms":50.8},{"L":512,"tps":47.55,"ms":21.0,"first_ms":91.9},{"L":768,"tps":46.92,"ms":21.3,"first_ms":137.4},{"L":1024,"tps":46.0,"ms":21.7,"first_ms":183.1},{"L":1536,"tps":45.03,"ms":22.2,"first_ms":275.2},{"L":2048,"tps":44.66,"ms":22.4,"first_ms":380.6}]},"runs":{"continuous_c1":{"n":64,"tps":44.63,"ttft50":0.065,"ttft90":0.168,"tpot50":21.8,"lat50":2.71,"wall":228.2,"tokens":10184},"continuous_c16":{"n":64,"tps":272.12,"ttft50":0.134,"ttft90":0.764,"tpot50":48.2,"lat50":6.36,"wall":37.4,"tokens":10184},"continuous_c32":{"n":64,"tps":307.48,"ttft50":0.249,"ttft90":2.015,"tpot50":78.7,"lat50":10.26,"wall":33.1,"tokens":10184},"continuous_c4":{"n":64,"tps":140.9,"ttft50":0.092,"ttft90":0.205,"tpot50":26.4,"lat50":3.44,"wall":72.3,"tokens":10184},"naive_c4":{"n":12,"tps":9.6,"ttft50":36.697,"ttft90":51.732,"tpot50":80.5,"lat50":53.32,"wall":194.6,"tokens":1867},"static_c1":{"n":64,"tps":44.62,"ttft50":0.058,"ttft90":0.159,"tpot50":21.8,"lat50":2.67,"wall":228.2,"tokens":10184},"static_c16":{"n":64,"tps":166.08,"ttft50":8.189,"ttft90":11.773,"tpot50":40.8,"lat50":13.34,"wall":61.3,"tokens":10184},"static_c32":{"n":64,"tps":235.63,"ttft50":3.482,"ttft90":14.906,"tpot50":65.1,"lat50":14.9,"wall":43.2,"tokens":10184},"static_c4":{"n":64,"tps":76.26,"ttft50":2.856,"ttft90":8.948,"tpot50":25.3,"lat50":7.49,"wall":133.5,"tokens":10184}},"occ":{"static":{"end":61.32,"slots":16,"d":[[1.17,16],[2.43,15],[2.79,14],[4.01,13],[4.77,12],[5.06,11],[5.95,10],[6.15,9],[6.58,8],[6.69,7],[6.85,6],[9.35,5],[10.86,4],[12.45,3],[12.95,2],[14.0,1],[15.41,15],[17.7,14],[18.0,13],[18.51,12],[18.85,11],[20.13,10],[20.46,9],[20.96,8],[21.34,7],[21.68,6],[21.83,5],[22.68,4],[22.84,3],[23.77,2],[27.61,1],[30.8,15],[31.91,14],[32.08,13],[32.68,12],[32.76,11],[33.73,10],[33.89,9],[34.14,8],[34.43,7],[34.55,6],[34.91,5],[36.19,4],[36.8,3],[38.11,2],[40.79,1],[43.18,15],[44.25,14],[44.56,13],[44.64,12],[44.99,11],[45.48,10],[46.05,9],[46.54,8],[46.71,7],[46.92,6],[47.92,5],[48.79,4],[48.91,3],[50.34,2],[53.64,1],[56.37,3],[57.52,2],[58.34,1]],"tps":166.1},"continuous":{"end":37.42,"slots":16,"d":[[1.16,16],[2.41,15],[2.45,16],[2.94,15],[2.98,16],[4.24,15],[4.28,16],[5.08,15],[5.13,16],[5.48,15],[5.53,16],[5.66,15],[5.71,16],[6.78,15],[6.82,16],[7.06,15],[7.1,16],[7.69,15],[7.74,16],[7.91,15],[7.95,16],[8.32,15],[8.38,16],[9.7,15],[9.74,16],[11.82,15],[11.86,16],[12.07,15],[12.11,16],[12.77,15],[12.81,16],[13.46,15],[13.5,16],[14.23,15],[14.28,16],[14.81,15],[14.85,16],[15.11,15],[15.15,16],[15.7,15],[15.74,16],[16.04,15],[16.08,16],[16.47,15],[16.51,16],[16.72,15],[16.76,16],[16.93,15],[16.97,16],[17.52,15],[17.56,16],[17.97,15],[18.01,16],[18.83,15],[18.87,16],[19.12,15],[19.15,16],[19.64,14],[19.68,16],[19.9,15],[19.94,16],[20.02,15],[20.06,16],[20.36,15],[20.4,16],[20.9,15],[20.94,16],[21.53,15],[21.57,16],[21.82,15],[21.86,16],[22.25,15],[22.29,16],[22.49,15],[22.53,16],[23.27,15],[23.47,16],[24.26,15],[24.3,16],[24.79,15],[24.83,16],[25.09,15],[25.13,16],[25.5,14],[25.54,16],[26.26,15],[26.3,16],[26.67,15],[26.71,16],[27.17,15],[27.21,16],[27.42,15],[27.64,14],[28.68,13],[28.88,12],[29.0,11],[29.58,10],[29.75,9],[30.41,8],[30.53,7],[30.74,6],[32.25,5],[32.45,4],[33.34,3],[33.91,2],[34.85,1]],"tps":272.1}},"fp32_c4":{"naive":{"n":3,"tps":5.58,"ttft50":1.27,"ttft90":48.847,"tpot50":176.4,"lat50":60.55,"wall":85.1,"tokens":475},"static":{"n":12,"tps":30.52,"ttft50":5.798,"ttft90":13.933,"tpot50":70.1,"lat50":16.33,"wall":61.2,"tokens":1867},"continuous":{"n":12,"tps":34.37,"ttft50":0.284,"ttft90":0.504,"tpot50":96.2,"lat50":12.06,"wall":54.3,"tokens":1867}},"seqlen_meta":{"dtype":"float16","new_tokens":32},"meta":{"device":"mps","dtype":"float16","torch":"2.14.0","platform":"macOS-27.0.1-arm64-arm-64bit","timestamp":"2026-11-09T12:41:38"}};
+// 1-bit series styles: naive dashed, static/KV thin with hollow markers, continuous heavy with filled markers.
+const STY = {
+  naive: { dash: "5 4", w: 2, mfill: "#000", mstroke: "#fff", r: 3, area: "url(#p-hatch)", sw: "naive" },
+  static: { dash: null, w: 1.5, mfill: "#fff", mstroke: "#000", r: 4, area: "url(#p-hatch)", sw: "static" },
+  continuous: { dash: null, w: 3, mfill: "#000", mstroke: "#fff", r: 4, area: "url(#p-dots)", sw: "continuous" },
+};
+function lineAttrs(s) { const a = { fill: "none", stroke: "#000", "stroke-width": s.w, "stroke-linejoin": "round" }; if (s.dash) a["stroke-dasharray"] = s.dash; return a; }
+function dotAttrs(s, cx, cy) { return { cx, cy, r: s.r, fill: s.mfill, stroke: s.mstroke === "#fff" ? "#fff" : "#000", "stroke-width": s.mstroke === "#fff" ? 1.5 : 1.5 }; }
+(function () {
+  const $ = (s) => document.querySelector(s);
+  const NS = "http://www.w3.org/2000/svg";
+  const tip = $("#tip");
+  function el(tag, attrs, parent) {
+    const e = document.createElementNS(NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  function txt(parent, x, y, s, attrs) { const t = el("text", Object.assign({ x, y }, attrs || {}), parent); t.textContent = s; return t; }
+  function showTip(ev, html) {
+    tip.innerHTML = html; tip.hidden = false;
+    const w = tip.offsetWidth, h = tip.offsetHeight;
+    let x = ev.clientX + 14, y = ev.clientY - h - 10;
+    if (x + w > window.innerWidth - 8) x = ev.clientX - w - 14;
+    if (y < 8) y = ev.clientY + 16;
+    tip.style.left = x + "px"; tip.style.top = y + "px";
+  }
+  function hideTip() { tip.hidden = true; }
+
+  /* ---------- diagram: work per step ---------- */
+  (function () {
+    const svg = $("#dg-work");
+    const P = 4, G = 5, cell = 22, gap = 3, rows = G;
+    const panels = [{ x: 70, name: "Naive", naive: true }, { x: 410, name: "KV cache", naive: false }];
+    panels.forEach((pn) => {
+      txt(svg, pn.x, 18, pn.name, { class: "h" });
+      let total = 0;
+      for (let r = 0; r < rows; r++) {
+        const y = 30 + r * (cell + gap);
+        if (pn.x === 70) txt(svg, pn.x - 10, y + 15, r === 0 ? "prefill" : "step " + r, { class: "m", "text-anchor": "end" });
+        const n = P + r;
+        for (let c = 0; c < n; c++) {
+          const isNew = r === 0 || c === n - 1;
+          let cls;
+          if (pn.naive) cls = (r === 0 || c === n - 1) ? "c-comp1" : "c-redo";
+          else cls = isNew ? "c-comp2" : "c-read";
+          el("rect", { x: pn.x + c * (cell + gap), y, width: cell, height: cell, rx: 3, class: cls }, svg);
+          if (pn.naive || isNew) total++;
+        }
+      }
+      txt(svg, pn.x, 30 + rows * (cell + gap) + 16, `${total} position-passes for ${G} tokens`, { class: "m" });
+      pn.total = total;
+    });
+  })();
+
+  /* ---------- diagram: pool before / after packing ---------- */
+  (function () {
+    const svg = $("#dg-pool");
+    const N = 18, cell = 13, gap = 2, rowH = 22;
+    const before = [
+      { id: "R0", p: 5, g: 6 }, { id: "R1", p: 4, g: 9, dead: true }, { id: "R2", p: 7, g: 3 }, { id: "R3", p: 3, g: 5 }, null, null,
+    ];
+    const after = [before[0], before[2], before[3], null, null, null];
+    const panels = [{ x: 64, title: "before: R1 finished on this step", rows: before }, { x: 470, title: "after: survivors packed to [0, 3)", rows: after }];
+    panels.forEach((pn, pi) => {
+      txt(svg, pn.x, 16, pn.title, { class: "h" });
+      pn.rows.forEach((r, i) => {
+        const y = 30 + i * (rowH + 6);
+        if (pi === 0) txt(svg, pn.x - 12, y + 15, "slot " + i, { class: "m", "text-anchor": "end" });
+        for (let c = 0; c < N; c++) {
+          let cls = "c-empty";
+          if (r && c < r.p) cls = r.dead ? "c-dead" : "c-prompt";
+          else if (r && c < r.p + r.g) cls = r.dead ? "c-dead" : "c-gen";
+          el("rect", { x: pn.x + c * (cell + gap), y: y + 3, width: cell, height: rowH - 6, rx: 2, class: cls }, svg);
+        }
+        if (r) txt(svg, pn.x + N * (cell + gap) + 6, y + 15, r.dead ? r.id + " ✕" : r.id, { class: "m" });
+      });
+    });
+    // move arrows between panels: R2 slot 2 -> 1, R3 slot 3 -> 2
+    const yOf = (i) => 30 + i * (rowH + 6) + rowH / 2;
+    const x0 = 64 + N * (cell + gap) + 40, x1 = 466;
+    [[2, 1, "move"], [3, 2, "move"]].forEach(([a, b, l]) => {
+      el("path", { d: `M${x0},${yOf(a)} C${x0 + 20},${yOf(a)} ${x1 - 26},${yOf(b)} ${x1 - 4},${yOf(b)}`, class: "wire", "marker-end": "url(#ah2)" }, svg);
+    });
+    txt(svg, (x0 + x1) / 2, yOf(1) - 2, "cache.move", { class: "m", "text-anchor": "middle" });
+    const defs = el("defs", {}, svg);
+    const mk = el("marker", { id: "ah2", viewBox: "0 0 10 10", refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: "auto-start-reverse" }, defs);
+    el("path", { d: "M0,0 L10,5 L0,10 z", class: "ah" }, mk);
+    // brace: decode reads slice(0, 3)
+    const bx = 772, yt = 30 + 3, yb = 30 + 2 * (rowH + 6) + rowH - 3;
+    el("path", { d: `M${bx},${yt} h6 V${yb} h-6`, class: "brace" }, svg);
+    const yb2 = 30 + 6 * (rowH + 6) + 10;
+    txt(svg, 470, yb2, "decode reads slice(0, 3): a view, no copy", { class: "s3" });
+    txt(svg, 64, yb2, "decode would need index_select([0, 2, 3])", { class: "m" });
+  })();
+
+  if (!DATA) return;
+  const RUNS = DATA.runs;
+  const CONC = [1, 4, 16, 32];
+
+  /* ---------- seqlen line chart ---------- */
+  (function () {
+    const svg = $("#ch-seq");
+    const nv = DATA.seqlen.naive, cv = DATA.seqlen.cached;
+    const L = cv.map((r) => r.L);
+    const S = [
+      { name: "Naive", st: STY.naive, rows: nv },
+      { name: "KV cache", st: STY.static, rows: cv },
+    ];
+    const maxL = Math.max(...L), ymax = Math.ceil(Math.max(...cv.map((r) => r.tps), ...nv.map((r) => r.tps)) / 10) * 10;
+    const m = { l: 44, r: 100, t: 12, b: 34 }, W = 640, H = 260;
+    const x = (v) => m.l + v / maxL * (W - m.l - m.r);
+    const y = (v) => H - m.b - v / ymax * (H - m.t - m.b);
+    for (let t = 0; t <= ymax; t += 10) {
+      el("line", { x1: m.l, x2: W - m.r, y1: y(t), y2: y(t), class: "gridl" }, svg);
+      txt(svg, m.l - 8, y(t) + 4, t, { "text-anchor": "end" });
+    }
+    L.filter((t) => t >= 256 || t === L[0]).forEach((t) => txt(svg, x(t), H - m.b + 18, t, { "text-anchor": "middle" }));
+    txt(svg, m.l, H - 2, "prompt length (tokens)");
+    el("line", { x1: m.l, x2: W - m.r, y1: y(0), y2: y(0), class: "axis" }, svg);
+    S.forEach((s) => {
+      el("polyline", Object.assign({ points: s.rows.map((r) => x(r.L) + "," + y(r.tps)).join(" ") }, lineAttrs(s.st)), svg);
+      s.rows.forEach((r) => el("circle", dotAttrs(s.st, x(r.L), y(r.tps)), svg));
+      const last = s.rows[s.rows.length - 1];
+      txt(svg, x(last.L) + 10, y(last.tps) + 4, s.name + " " + last.tps.toFixed(1), { class: "lbl" });
+    });
+    L.forEach((t, i) => {
+      const hit = el("rect", { x: x(t) - 14, y: m.t, width: 28, height: H - m.t - m.b, fill: "transparent" }, svg);
+      hit.addEventListener("mousemove", (e) => showTip(e, `<b>${t} tokens</b><br>Naive ${nv[i].tps.toFixed(2)} tok/s · ${nv[i].ms} ms/tok<br>KV cache ${cv[i].tps.toFixed(2)} tok/s · ${cv[i].ms} ms/tok`));
+      hit.addEventListener("mouseleave", hideTip);
+    });
+  })();
+
+  /* ---------- concurrency charts (shared x) ---------- */
+  function concChart(svg, opts) {
+    const m = { l: 46, r: 16, t: 14, b: 44 }, W = 400, H = 280;
+    const xi = (i) => m.l + 16 + i / (CONC.length - 1) * (W - m.l - m.r - 32);
+    const y = opts.y(m, H);
+    opts.ticks.forEach((t) => {
+      el("line", { x1: m.l, x2: W - m.r, y1: y(t), y2: y(t), class: "gridl" }, svg);
+      txt(svg, m.l - 8, y(t) + 4, opts.fmt(t), { "text-anchor": "end" });
+    });
+    el("line", { x1: m.l, x2: W - m.r, y1: H - m.b, y2: H - m.b, class: "axis" }, svg);
+    CONC.forEach((c, i) => txt(svg, xi(i), H - m.b + 18, c, { "text-anchor": "middle" }));
+    txt(svg, W - m.r, H - 2, "concurrency (slots)", { "text-anchor": "end" });
+    if (opts.ref != null) {
+      el("line", { x1: m.l, x2: W - m.r, y1: y(opts.ref), y2: y(opts.ref), stroke: "#000", "stroke-width": 2, "stroke-dasharray": STY.naive.dash }, svg);
+      txt(svg, m.l + 6, y(opts.ref) - 6, opts.refLabel, { class: "lbl" });
+    }
+    const series = [["continuous", STY.continuous, "Continuous"], ["static", STY.static, "Static"]];
+    series.forEach(([mode, col]) => {
+      const pts = CONC.map((c, i) => { const r = RUNS[`${mode}_c${c}`]; return r ? [xi(i), y(opts.val(r))] : null; }).filter(Boolean);
+      el("polyline", Object.assign({ points: pts.map((p) => p.join(",")).join(" ") }, lineAttrs(col)), svg);
+      pts.forEach((p) => el("circle", dotAttrs(col, p[0], p[1]), svg));
+    });
+    // end labels for the last point, nudged apart
+    const lastC = CONC[CONC.length - 1];
+    const lab = series.map(([mode, col, name]) => { const r = RUNS[`${mode}_c${lastC}`]; return { name, v: opts.val(r), yy: y(opts.val(r)) }; });
+    if (Math.abs(lab[0].yy - lab[1].yy) < 14) { const mid = (lab[0].yy + lab[1].yy) / 2, up = lab[0].yy < lab[1].yy ? 0 : 1; lab[up].yy = mid - 8; lab[1 - up].yy = mid + 10; }
+    lab.forEach((l) => txt(svg, xi(CONC.length - 1) - 8, l.yy - 8, opts.fmt(l.v, true), { class: "lbl", "text-anchor": "end" }));
+    CONC.forEach((c, i) => {
+      const hit = el("rect", { x: xi(i) - 22, y: m.t, width: 44, height: H - m.t - m.b, fill: "transparent" }, svg);
+      hit.addEventListener("mousemove", (e) => {
+        const s = RUNS[`static_c${c}`], k = RUNS[`continuous_c${c}`];
+        showTip(e, `<b>concurrency ${c}</b><br>Continuous ${opts.fmt(opts.val(k), true)}<br>Static ${opts.fmt(opts.val(s), true)}`);
+      });
+      hit.addEventListener("mouseleave", hideTip);
+    });
+  }
+  (function () {
+    const maxv = Math.max(...CONC.map((c) => Math.max(RUNS[`continuous_c${c}`].tps, RUNS[`static_c${c}`].tps)));
+    const step = maxv > 400 ? 100 : 50, top = Math.ceil(maxv / step) * step;
+    const ticks = []; for (let t = 0; t <= top; t += step) ticks.push(t);
+    const naive = RUNS.naive_c4 ? RUNS.naive_c4.tps : null;
+    concChart($("#ch-tp"), {
+      y: (m, H) => (v) => H - m.b - v / top * (H - m.t - m.b), ticks,
+      fmt: (v, full) => full ? v.toFixed(0) + " tok/s" : v, val: (r) => r.tps,
+      ref: naive, refLabel: naive ? `naive ${naive.toFixed(1)}` : "",
+    });
+  })();
+  (function () {
+    const vals = CONC.flatMap((c) => [RUNS[`continuous_c${c}`].ttft50, RUNS[`static_c${c}`].ttft50]);
+    const lo = Math.pow(10, Math.floor(Math.log10(Math.min(...vals)))), hi = Math.pow(10, Math.ceil(Math.log10(Math.max(...vals))));
+    const ticks = []; for (let t = lo; t <= hi * 1.001; t *= 10) ticks.push(t);
+    concChart($("#ch-ttft"), {
+      y: (m, H) => (v) => H - m.b - (Math.log10(v) - Math.log10(lo)) / (Math.log10(hi) - Math.log10(lo)) * (H - m.t - m.b), ticks,
+      fmt: (v, full) => full ? (v < 1 ? Math.round(v * 1000) + " ms" : v.toFixed(1) + " s") : (v < 1 ? v + "" : v.toFixed(0)) + " s", val: (r) => r.ttft50,
+    });
+  })();
+
+  /* ---------- occupancy step charts ---------- */
+  (function () {
+    const svg = $("#ch-occ");
+    const runs = [
+      Object.assign({ name: "Static", st: STY.static }, DATA.occ.static),
+      Object.assign({ name: "Continuous", st: STY.continuous }, DATA.occ.continuous),
+    ];
+    const SL = runs[0].slots, tmax = Math.max(runs[0].end, runs[1].end);
+    const W = 640, m = { l: 44, r: 12 }, ph = 100, top0 = 22, gapP = 40;
+    const x = (t) => m.l + t / tmax * (W - m.l - m.r);
+    runs.forEach((r, ri) => {
+      const t0 = top0 + ri * (ph + gapP);
+      const y = (v) => t0 + ph - v / SL * ph;
+      let area = 0;
+      r.d.forEach((p, i) => { const nx = i + 1 < r.d.length ? r.d[i + 1][0] : r.end; area += p[1] * (nx - p[0]); });
+      const occ = area / (SL * (r.end - r.d[0][0]));
+      txt(svg, m.l, t0 - 8, `${r.name} · ${Math.round(occ * 100)}% occupied · ${r.tps} tok/s · ${r.end.toFixed(0)} s`, { class: "lbl" });
+      [0, SL / 2, SL].forEach((t) => {
+        const ga = { x1: m.l, x2: W - m.r, y1: y(t), y2: y(t), class: t === 0 ? "axis" : "gridl" };
+        if (t === SL) ga["stroke-dasharray"] = "3 3";
+        el("line", ga, svg);
+        txt(svg, m.l - 8, y(t) + 4, t, { "text-anchor": "end" });
+      });
+      let path = `M${x(r.d[0][0])},${y(r.d[0][1])}`;
+      r.d.forEach((p, i) => {
+        const nx = i + 1 < r.d.length ? r.d[i + 1][0] : r.end;
+        path += ` L${x(p[0])},${y(p[1])} L${x(nx)},${y(p[1])}`;
+      });
+      el("path", { d: `M${x(r.d[0][0])},${y(0)} ` + path.slice(1).replace(/^[^L]+/, "") + ` L${x(r.end)},${y(0)} Z`, fill: r.st.area, stroke: "none" }, svg);
+      el("path", { d: path, fill: "none", stroke: "#000", "stroke-width": 1.6 }, svg);
+      const hit = el("rect", { x: m.l, y: t0, width: W - m.l - m.r, height: ph, fill: "transparent" }, svg);
+      const cross = el("line", { y1: t0, y2: t0 + ph, stroke: "#000", "stroke-width": 1, visibility: "hidden" }, svg);
+      hit.addEventListener("mousemove", (e) => {
+        const b = svg.getBoundingClientRect(), t = ((e.clientX - b.left) * W / b.width - m.l) / (W - m.l - m.r) * tmax;
+        let v = 0; r.d.forEach((p) => { if (t >= p[0]) v = p[1]; });
+        cross.setAttribute("x1", x(t)); cross.setAttribute("x2", x(t)); cross.setAttribute("visibility", "visible");
+        showTip(e, `<b>${r.name}</b> at ${t.toFixed(1)} s<br>${t > r.end ? "run finished" : v + " of " + SL + " slots busy"}`);
+      });
+      hit.addEventListener("mouseleave", () => { hideTip(); cross.setAttribute("visibility", "hidden"); });
+    });
+    const ya = top0 + 2 * ph + gapP;
+    const step = tmax > 150 ? 50 : tmax > 60 ? 20 : 10;
+    for (let t = 0; t <= tmax; t += step) txt(svg, x(t), ya + 18, t, { "text-anchor": "middle" });
+    txt(svg, W - m.r, ya + 36, "time (s)", { "text-anchor": "end" });
+  })();
+
+  /* ---------- runs table ---------- */
+  (function () {
+    const body = $("#runs");
+    const order = [["naive", [4]], ["static", CONC], ["continuous", CONC]];
+    
+    const s = (v) => v < 1 ? Math.round(v * 1000) + " ms" : v.toFixed(2) + " s";
+    order.forEach(([mode, cs]) => cs.forEach((c) => {
+      const r = RUNS[`${mode}_c${c}`]; if (!r) return;
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td><span class="sw g g-${mode}"></span>${mode} c${c}</td><td class="num">${r.n}</td><td class="num">${r.tps.toFixed(1)}</td><td class="num">${s(r.ttft50)}</td><td class="num">${s(r.ttft90)}</td><td class="num">${r.tpot50.toFixed(0)} ms</td><td class="num">${r.lat50.toFixed(1)} s</td><td class="num">${r.wall.toFixed(0)} s</td>`;
+      body.appendChild(tr);
+    }));
+  })();
+})();
+
+/* ---------- KV calculator ---------- */
+(function () {
+  const $ = (s) => document.querySelector(s);
+  let dt = 2;
+  const slots = $("#c-slots"), len = $("#c-len");
+  const fmt = (b) => {
+    const u = ["B", "KiB", "MiB", "GiB"]; let i = 0;
+    while (b >= 1024 && i < 3) { b /= 1024; i++; }
+    return (b >= 100 || i === 0 ? Math.round(b) : b.toFixed(1)) + " " + u[i];
+  };
+  function upd() {
+    const S = +slots.value, M = 2 ** +len.value;
+    const perTok = 2 * 28 * 8 * 128 * dt;
+    $("#c-slots-v").textContent = S; $("#c-len-v").textContent = M;
+    $("#c-tok").textContent = fmt(perTok);
+    $("#c-slot").textContent = fmt(perTok * M);
+    $("#c-pool").textContent = fmt(perTok * M * S);
+    $("#c-w").textContent = fmt(596e6 * dt);
+    const used = Math.min(408, M), pct = used / M;
+    $("#c-used").style.width = (pct * 100).toFixed(1) + "%";
+    $("#c-used-t").textContent = `Median trace request uses ${used} of ${M} positions`;
+    $("#c-waste").textContent = M > 408 ? `${Math.round((1 - pct) * 100)}% of each slot reserved but idle` : "slot shorter than the median request";
+  }
+  slots.addEventListener("input", upd); len.addEventListener("input", upd);
+  document.querySelectorAll("#calc [data-dt]").forEach((b) => b.addEventListener("click", () => {
+    dt = +b.dataset.dt;
+    document.querySelectorAll("#calc [data-dt]").forEach((o) => o.setAttribute("aria-pressed", o === b));
+    upd();
+  }));
+  upd();
+})();
+
+/* ---------- scheduler simulator ---------- */
+(function () {
+  const $ = (s) => document.querySelector(s);
+  const TRACE = [27, 337, 111, 116, 88, 131, 81, 268, 35, 218, 136, 319];
+  const SLOTS = 4;
+  function fresh(mode) {
+    return { mode, waiting: TRACE.map((n, i) => ({ id: i, max: n, out: 0 })), running: [], done: [], step: 0, tokens: 0, occ: [], moved: new Set() };
+  }
+  // Mirrors Scheduler.step: decode -> retire -> admit (prefill) -> retire.
+  function step(s) {
+    const n = s.running.length; let tok = 0;
+    s.moved = new Set();
+    if (n) { s.running.forEach((r) => r.out++); tok += n; retire(s); }
+    if (!(s.mode === "static" && s.running.length)) {
+      while (s.running.length < SLOTS && s.waiting.length) {
+        const r = s.waiting.shift(); r.out = 1; r.slot = s.running.length; s.running.push(r); tok++;
+      }
+    }
+    retire(s);
+    s.step++; s.tokens += tok; s.occ.push(n);
+  }
+  function retire(s) {
+    const still = [];
+    s.running.forEach((r) => { if (r.out >= r.max) s.done.push(r); else still.push(r); });
+    still.forEach((r, i) => { if (r.slot !== i) { s.moved.add(r.id); r.slot = i; } });
+    s.running = still;
+  }
+  function full(mode) {
+    const s = fresh(mode);
+    while (s.running.length || s.waiting.length) step(s);
+    const busy = s.occ.filter((v, i) => i > 0);
+    return { steps: s.step, occ: busy.reduce((a, b) => a + b, 0) / (busy.length * SLOTS), tps: s.tokens / s.step };
+  }
+  const cmp = $("#s-cmp");
+  [["Static", "static"], ["Continuous", "continuous"]].forEach(([lbl, md]) => {
+    const r = full(md);
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td><span class="sw g g-${md}"></span>${lbl}</td><td class="num">${r.steps}</td><td class="num">${Math.round(r.occ * 100)}%</td><td class="num">${r.tps.toFixed(2)}</td>`;
+    cmp.appendChild(tr);
+  });
+
+  let S = fresh("continuous"), timer = null;
+  const panel = $("#sim"), slotsEl = $("#s-slots"), cv = $("#occ");
+  for (let i = 0; i < SLOTS; i++) {
+    slotsEl.insertAdjacentHTML("beforeend", `<div class="slot"><span>slot ${i}</span><div class="track"><div class="fill"></div><div class="txt"></div></div></div>`);
+  }
+  const maxSteps = Math.max(full("static").steps, full("continuous").steps);
+  function draw() {
+    panel.classList.toggle("static-mode", S.mode === "static");
+    slotsEl.querySelectorAll(".slot").forEach((row, i) => {
+      const r = S.running[i], tr = row.querySelector(".track"), f = row.querySelector(".fill"), t = row.querySelector(".txt");
+      tr.classList.toggle("busy", !!r);
+      f.style.width = r ? (r.out / r.max * 100) + "%" : "0";
+      t.innerHTML = r ? `<span>R${r.id}${S.moved.has(r.id) ? ' <span class="mv">↓ moved</span>' : ""}</span><span>${r.out} / ${r.max}</span>` : `<span>free</span><span></span>`;
+    });
+    $("#s-wait").innerHTML = S.waiting.map((r) => `<span class="chip">R${r.id} · ${r.max}</span>`).join("") || '<span class="chip done">empty</span>';
+    $("#s-done").innerHTML = S.done.map((r) => `<span class="chip">R${r.id}</span>`).join("");
+    $("#s-n").textContent = S.step;
+    $("#s-tok").textContent = S.tokens;
+    const busy = S.occ.slice(1);
+    $("#s-occ").textContent = busy.length ? Math.round(busy.reduce((a, b) => a + b, 0) / (busy.length * SLOTS) * 100) + "%" : "–";
+    $("#s-fin").textContent = `${S.done.length} / 12`;
+    drawOcc();
+  }
+  function drawOcc() {
+    const dpr = window.devicePixelRatio || 1, w = cv.clientWidth, h = 46;
+    cv.width = w * dpr; cv.height = h * dpr;
+    const ctx = cv.getContext("2d"); ctx.scale(dpr, dpr); ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = "#000";
+    const bw = w / Math.max(maxSteps, S.occ.length, 1);
+    S.occ.forEach((v, i) => { const bh = v / SLOTS * (h - 6); ctx.fillRect(i * bw, h - bh, Math.max(bw, 1), bh); });
+  }
+  function stop() { if (timer) { clearInterval(timer); timer = null; } $("#s-play").textContent = "Play"; }
+  function tick() { if (!S.running.length && !S.waiting.length) { stop(); return; } step(S); draw(); }
+  $("#s-step").addEventListener("click", () => { stop(); tick(); });
+  $("#s-play").addEventListener("click", () => {
+    if (timer) { stop(); return; }
+    if (!S.running.length && !S.waiting.length) S = fresh(S.mode);
+    $("#s-play").textContent = "Pause";
+    timer = setInterval(tick, 16);
+  });
+  $("#s-reset").addEventListener("click", () => { stop(); S = fresh(S.mode); draw(); });
+  document.querySelectorAll("#sim [data-mode]").forEach((b) => b.addEventListener("click", () => {
+    stop(); S = fresh(b.dataset.mode);
+    document.querySelectorAll("#sim [data-mode]").forEach((o) => o.setAttribute("aria-pressed", o === b));
+    draw();
+  }));
+  // Open in a realistic mid-run state rather than an empty grid.
+  for (let i = 0; i < 60; i++) step(S);
+  draw();
+  window.addEventListener("resize", drawOcc);
+})();
+</script>
+</body>
+
+</html>
